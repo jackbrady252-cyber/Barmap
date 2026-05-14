@@ -1,0 +1,8 @@
+[out:json][timeout:60];
+(
+  node["leisure"="fitness_station"](51.4,-10.7,55.5,-5.4);
+  way["leisure"="fitness_station"](51.4,-10.7,55.5,-5.4);
+  node["sport"="calisthenics"](51.4,-10.7,55.5,-5.4);
+  way["sport"="calisthenics"](51.4,-10.7,55.5,-5.4);
+);
+out center tags;

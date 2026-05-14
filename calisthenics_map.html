@@ -1,0 +1,3022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BARMAP — Calisthenics Atlas of Ireland</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Leaflet CSS with fallbacks -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+:root {
+  --bg: #08080a;
+  --surface: #131419;
+  --surface-2: #1c1e25;
+  --surface-3: #262830;
+  --border: #2a2d36;
+  --border-soft: #1f2128;
+  --text: #f5f5f0;
+  --text-dim: #c4c4be;
+  --muted: #7a7a7a;
+  --accent: #ff3a2f;
+  --accent-soft: #ff6b5b;
+  --verified: #45e09c;
+  --verified-soft: #6ce8b8;
+  --gold: #ffc83a;
+  --display: 'Space Grotesk', system-ui, sans-serif;
+  --body: 'Inter', system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; font-family: var(--body); background: var(--bg); color: var(--text); overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+/* SVG icon helper */
+svg.icon { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+svg.icon-sm { width: 13px; height: 13px; }
+
+/* Topbar */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 60px; z-index: 1000;
+  background: rgba(8,8,10,.92); backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 18px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--accent); border-radius: 8px; }
+.brand-text { font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: .12em; }
+.brand-sub { font-family: var(--body); font-weight: 500; font-size: 11px; color: var(--muted); letter-spacing: .1em; margin-left: 6px; }
+.nav-actions { display: flex; gap: 10px; align-items: center; }
+
+.btn {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600;
+  font-family: var(--body); font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all .15s ease;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: #fff; border: none; }
+.btn-primary:hover { background: var(--accent-soft); }
+.btn-ghost { background: transparent; border: 1px solid var(--border); }
+
+.avatar { width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 700; font-size: 13px; color: #1a0d05;
+  border: 1px solid var(--border);
+}
+
+/* Map */
+#map { position: absolute; inset: 60px 0 0 0; background: #050507; }
+.leaflet-container { background: #050507; font-family: var(--body); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border); border-radius: 8px; }
+.leaflet-popup-content { margin: 10px 14px; font-size: 12px; line-height: 1.4; }
+.leaflet-control-attribution { background: rgba(8,8,10,.8) !important; color: var(--muted) !important; font-size: 9px; padding: 2px 6px; }
+.leaflet-control-attribution a { color: var(--accent-soft) !important; }
+.leaflet-control-zoom { border-radius: 8px !important; overflow: hidden; border: 1px solid var(--border) !important; }
+.leaflet-control-zoom a { background: var(--surface) !important; color: var(--text) !important; border: none !important; border-bottom: 1px solid var(--border-soft) !important; font-size: 16px !important; line-height: 28px !important; width: 30px !important; height: 30px !important; }
+.leaflet-control-zoom a:hover { background: var(--surface-2) !important; color: var(--accent) !important; }
+
+/* Custom marker (no emoji) — calisthenics rig silhouette in a pin */
+.bar-pin {
+  width: 30px; height: 38px; position: relative;
+  filter: drop-shadow(0 4px 8px rgba(255,58,47,.4));
+}
+.bar-pin.verified { filter: drop-shadow(0 4px 8px rgba(69,224,156,.4)); }
+.bar-pin.hidden { filter: drop-shadow(0 4px 10px rgba(255,200,58,.38)); }
+body.marking-spot #map { cursor: crosshair; }
+.hidden-meta { padding: 12px 20px; border-bottom: 1px solid var(--border-soft); background: #0f1015; display: none; gap: 8px; flex-wrap: wrap; }
+.hidden-meta.show { display: flex; }
+.hidden-meta .chip { border-color: rgba(255,200,58,.28); color: var(--gold); background: rgba(255,200,58,.08); }
+
+/* Layer toggle */
+.layer-toggle {
+  position: fixed; top: 76px; right: 18px; z-index: 800;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 3px; display: flex; gap: 1px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.layer-toggle button {
+  background: transparent; border: none; color: var(--muted);
+  padding: 7px 12px; cursor: pointer; border-radius: 8px;
+  font-family: var(--body); font-weight: 600; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 5px;
+  transition: all .15s ease;
+}
+.layer-toggle button:hover { color: var(--text); }
+.layer-toggle button.active { background: var(--accent); color: #fff; }
+
+/* Search */
+.search-wrap { position: fixed; top: 76px; left: 76px; z-index: 800; }
+.search-wrap input {
+  width: 300px; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: 11px 14px 11px 40px; border-radius: 10px;
+  font-family: var(--body); font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.search-wrap input:focus { outline: none; border-color: var(--accent); }
+.search-icon { position: absolute; top: 50%; left: 14px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+
+/* Count pill */
+.count-pill {
+  position: fixed; bottom: 22px; left: 18px; z-index: 700;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 9px 14px; border-radius: 999px; font-size: 12px;
+  font-family: var(--body); font-weight: 600; letter-spacing: .04em;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  display: flex; align-items: center; gap: 8px;
+}
+.count-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.count-pill .num { color: var(--accent-soft); font-family: var(--display); font-weight: 700; }
+
+/* Side panel */
+.panel {
+  position: fixed; top: 60px; right: 0; bottom: 0; width: 440px; max-width: 100%;
+  background: var(--surface); border-left: 1px solid var(--border);
+  transform: translateX(105%); transition: transform .35s cubic-bezier(.4,0,.2,1);
+  display: flex; flex-direction: column; z-index: 900;
+}
+.panel.open { transform: translateX(0); box-shadow: -16px 0 40px rgba(0,0,0,.5); }
+
+.panel-close {
+  position: absolute; top: 12px; right: 12px; z-index: 30;
+  background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.15);
+  color: #fff; width: 34px; height: 34px; border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .15s ease;
+}
+.panel-close:hover { background: var(--accent); border-color: var(--accent); }
+
+/* Park hero image */
+.park-hero {
+  position: relative; width: 100%; height: 220px;
+  background: #0a0a0a center/cover no-repeat;
+  border-bottom: 1px solid var(--border-soft);
+  overflow: hidden;
+}
+.park-hero.empty {
+  background:
+    linear-gradient(135deg, rgba(255,58,47,.18), rgba(69,224,156,.08)),
+    repeating-linear-gradient(45deg, transparent 0 20px, rgba(255,255,255,.02) 20px 40px);
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+}
+.park-hero.empty .placeholder-icon { color: var(--muted); }
+.park-hero.empty .placeholder-text { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; font-weight: 600; }
+.park-hero:not(.empty) .placeholder-icon,
+.park-hero:not(.empty) .placeholder-text { display: none; }
+.hero-fade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(19,20,25,.95) 0%, rgba(19,20,25,.55) 30%, transparent 65%); pointer-events: none; }
+.hero-credit { position: absolute; bottom: 6px; right: 12px; color: rgba(255,255,255,.5); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; font-weight: 500; }
+.hero-badge { position: absolute; top: 14px; left: 14px; z-index: 5;
+  padding: 4px 10px; border-radius: 4px;
+  background: var(--verified); color: #0a3925;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 4px;
+}
+.hero-badge.community { background: rgba(255,255,255,.15); color: #fff; backdrop-filter: blur(6px); }
+.photo-gallery {
+  display: none; gap: 6px; padding: 9px 20px; overflow-x: auto;
+  background: #0f1015; border-bottom: 1px solid var(--border-soft);
+}
+.photo-gallery.show { display: flex; }
+.photo-thumb {
+  flex: 0 0 64px; height: 48px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface-2) center/cover no-repeat;
+  cursor: pointer; opacity: .78; transition: opacity .15s ease, border-color .15s ease;
+}
+.photo-thumb:hover, .photo-thumb.active { opacity: 1; border-color: var(--accent); }
+
+/* Panel header */
+.panel-header { padding: 18px 20px 14px; position: relative; }
+.panel-header h2 { margin: 0 0 4px; font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: -.01em; }
+.panel-header .loc { color: var(--text-dim); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.panel-header .loc .pin-icon { color: var(--accent); }
+
+/* Stats row */
+.panel-stats { display: flex; gap: 1px; padding: 0; background: var(--border-soft); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+.stat { flex: 1; padding: 12px 14px; background: var(--surface); text-align: left; }
+.stat .v { font-family: var(--display); font-weight: 700; font-size: 18px; color: var(--text); }
+.stat .v .unit { font-size: 11px; color: var(--muted); margin-left: 2px; }
+.stat .l { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; font-weight: 600; margin-top: 2px; }
+
+/* Equipment chips */
+.equipment-wrap { padding: 14px 20px; border-bottom: 1px solid var(--border-soft); }
+.equipment-label { font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+.equipment { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 3px 9px; border-radius: 4px; font-weight: 500; }
+
+/* External actions */
+.external-links { display: flex; gap: 1px; padding: 0; background: var(--border-soft); }
+.external-links a {
+  flex: 1; padding: 12px; background: var(--surface); color: var(--text-dim);
+  text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  font-weight: 600; text-align: center; transition: all .15s ease;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.external-links a:hover { background: var(--surface-2); color: var(--accent); }
+
+/* Tabs */
+.tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border-soft); padding: 0 8px; }
+.tab { flex: 1; text-align: center; padding: 14px 8px; cursor: pointer;
+  font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  border-bottom: 2px solid transparent; transition: all .15s ease;
+}
+.tab:hover { color: var(--text-dim); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.tab-content { flex: 1; overflow-y: auto; padding: 14px 18px; background: #0e0f13; }
+.tab-content::-webkit-scrollbar { width: 6px; }
+.tab-content::-webkit-scrollbar-thumb { background: #2d333b; border-radius: 4px; }
+
+/* Posts */
+.composer { display: flex; gap: 8px; padding: 10px; background: var(--surface); border-radius: 10px; margin-bottom: 14px; border: 1px solid var(--border); }
+.composer input { flex: 1; background: transparent; border: none; color: var(--text); padding: 6px 8px; font-size: 13px; font-family: var(--body); }
+.composer input::placeholder { color: var(--muted); }
+.composer input:focus { outline: none; }
+.composer .btn-primary { padding: 6px 14px; font-size: 11px; }
+
+.post { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.post-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.post-head .meta b { font-size: 13px; font-weight: 600; }
+.post-head .meta .time { color: var(--muted); font-size: 11px; }
+.post-body { font-size: 13px; line-height: 1.5; color: var(--text-dim); white-space: pre-wrap; }
+.post-foot { display: flex; gap: 16px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+.post-foot .action { cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color .15s ease; }
+.post-foot .action:hover { color: var(--accent); }
+.workout-tag { display: inline-block; background: rgba(69,224,156,.1); border: 1px solid rgba(69,224,156,.3); color: var(--verified-soft); padding: 2px 8px; border-radius: 4px; font-size: 10px; margin-right: 4px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+
+.avatar-sm { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 11px; flex-shrink: 0; font-family: var(--display); }
+.avatar-sm.c1 { background: linear-gradient(135deg, #2575fc, #6a11cb); }
+.avatar-sm.c2 { background: linear-gradient(135deg, #f857a6, #ff5858); }
+.avatar-sm.c3 { background: linear-gradient(135deg, #11998e, #38ef7d); }
+.avatar-sm.c4 { background: linear-gradient(135deg, #fc4a1a, #f7b733); }
+.avatar-sm.c5 { background: linear-gradient(135deg, #8e2de2, #4a00e0); }
+
+/* Meetup */
+.meetup { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; gap: 12px; }
+.meetup .date { flex: 0 0 56px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; text-align: center; padding: 6px 0; }
+.meetup .date .m { color: var(--accent); font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: .08em; }
+.meetup .date .d { font-family: var(--display); font-size: 22px; font-weight: 700; line-height: 1; margin-top: 2px; }
+.meetup .info { flex: 1; }
+.meetup .info h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.meetup .info p { margin: 0; color: var(--muted); font-size: 12px; }
+.meetup .info .rsvp { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+.rsvp-btn { background: var(--accent); color: #fff; border: none; padding: 5px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-family: var(--body); }
+.rsvp-btn.going { background: var(--verified); color: #0a3925; }
+.going-count { color: var(--muted); font-size: 11px; }
+
+/* Challenge */
+.challenge { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.challenge-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.challenge-head h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.challenge-head .badge { background: rgba(255,58,47,.12); color: var(--accent-soft); border: 1px solid rgba(255,58,47,.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.leaderboard { background: var(--bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-soft); }
+.lb-row { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); gap: 12px; font-size: 12px; }
+.lb-row:last-child { border-bottom: none; }
+.lb-rank { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; background: var(--surface-2); color: var(--muted); font-family: var(--display); }
+.lb-row.r1 .lb-rank { background: var(--gold); color: #2a1a00; }
+.lb-row.r2 .lb-rank { background: #c0c0c0; color: #1a1a1a; }
+.lb-row.r3 .lb-rank { background: #cd7f32; color: #fff; }
+.lb-name { flex: 1; font-weight: 600; }
+.lb-score { color: var(--accent-soft); font-weight: 700; font-family: var(--display); }
+
+/* Profile modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; z-index: 1500; backdrop-filter: blur(4px); }
+.modal-bg.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 400px; max-width: 92vw; overflow: hidden; position: relative; }
+.modal-head { padding: 28px 20px 20px; text-align: center; background: linear-gradient(135deg, rgba(255,58,47,.15), rgba(255,200,58,.05)); border-bottom: 1px solid var(--border-soft); }
+.modal-head .avatar-lg { width: 78px; height: 78px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--gold)); margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #1a0d05; font-size: 28px; font-family: var(--display); }
+.modal-head h3 { margin: 0; font-family: var(--display); font-size: 20px; letter-spacing: -.01em; }
+.modal-head .handle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.modal-body { padding: 16px 20px 22px; }
+.modal-stats { display: flex; justify-content: space-around; padding: 14px 0; border-bottom: 1px solid var(--border-soft); margin-bottom: 16px; }
+.modal-stats .stat { text-align: center; padding: 0; background: transparent; }
+.modal-section h5 { margin: 0 0 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); font-weight: 700; }
+.modal-section ul { margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.modal-section li { padding: 7px 0; border-bottom: 1px dashed var(--border-soft); display: flex; justify-content: space-between; align-items: center; color: var(--text-dim); }
+.modal-section li:last-child { border-bottom: none; }
+.modal-section li b { color: var(--text); font-family: var(--display); }
+
+
+/* Hidden spot flow */
+.spot-toast {
+  position: fixed; left: 50%; top: 76px; transform: translateX(-50%);
+  z-index: 1200; display: none; align-items: center; gap: 10px;
+  background: rgba(19,20,25,.96); border: 1px solid rgba(255,200,58,.45);
+  color: var(--text); padding: 11px 14px; border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(0,0,0,.45); font-size: 12px; font-weight: 600;
+  letter-spacing: .02em; backdrop-filter: blur(12px);
+}
+.spot-toast.show { display: flex; }
+.spot-toast button { margin-left: 6px; }
+.spot-form { padding: 18px 20px 20px; display: grid; gap: 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-field { display: flex; flex-direction: column; gap: 6px; }
+.form-field.full { grid-column: 1 / -1; }
+.form-field label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.form-field input, .form-field textarea, .form-field select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: 10px 11px; font-family: var(--body); font-size: 13px;
+}
+.form-field textarea { min-height: 86px; resize: vertical; line-height: 1.45; }
+.form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: none; border-color: var(--accent); }
+.form-help { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: -2px; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.map-coordinate { color: var(--gold); font-family: var(--display); font-size: 12px; }
+@media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } .spot-toast { width: calc(100vw - 28px); justify-content: space-between; } }
+
+/* Loading + error */
+#loadingMsg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); padding: 20px 28px; border-radius: 12px; z-index: 9999; border: 1px solid var(--border); font-family: var(--body); font-size: 13px; color: var(--text-dim); }
+#loadingMsg .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#errorMsg { display: none; position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 14px 20px; border-radius: 10px; z-index: 9999; font-family: var(--body); max-width: 500px; font-size: 13px; line-height: 1.5; }
+
+/* Mobile */
+@media (max-width: 600px) {
+  .panel { width: 100%; }
+  .search-wrap { left: 76px; }
+  .search-wrap input { width: calc(100vw - 94px); max-width: 300px; }
+  .brand-sub { display: none; }
+  .layer-toggle { top: 140px; right: 10px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="6" x2="20" y2="6"/>
+        <line x1="6" y1="6" x2="6" y2="18"/>
+        <line x1="18" y1="6" x2="18" y2="18"/>
+        <line x1="9" y1="11" x2="15" y2="11"/>
+      </svg>
+    </div>
+    <div>
+      <span class="brand-text">BARMAP</span><span class="brand-sub">/ IRELAND</span>
+    </div>
+  </div>
+  <div class="nav-actions">
+    <button class="btn" id="addParkBtn">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Submit park
+    </button>
+    <div class="avatar" id="profileBtn" title="Profile">JB</div>
+  </div>
+</div>
+
+<div class="search-wrap">
+  <svg class="search-icon icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+  <input id="searchBox" placeholder="Search park or city…" />
+</div>
+
+<div class="layer-toggle">
+  <button id="btnSat" class="active">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="12,2 2,7 12,12 22,7"/><polyline points="2,17 12,22 22,17"/><polyline points="2,12 12,17 22,12"/></svg>
+    Satellite
+  </button>
+  <button id="btnMap">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="1,6 1,22 8,18 16,22 23,18 23,2 16,6 8,2"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+    Map
+  </button>
+</div>
+
+<div id="map"></div>
+
+<div class="spot-toast" id="spotToast">
+  <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M2 12h20"/><circle cx="12" cy="12" r="4"/></svg>
+  <span>Click the exact park location to submit for verification.</span>
+  <button class="btn btn-ghost" id="cancelSpotPick" type="button">Cancel</button>
+</div>
+
+<div class="count-pill"><span class="dot"></span><span class="num" id="visibleCount">0</span> verified parks tracked</div>
+
+<div class="panel" id="sidePanel">
+  <button class="panel-close" id="closePanel" title="Close">
+    <svg class="icon" viewBox="0 0 24 24" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <div class="park-hero empty" id="parkHero">
+    <svg class="placeholder-icon icon" viewBox="0 0 24 24" width="36" height="36" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><polyline points="21,15 16,10 6,19"/></svg>
+    <span class="placeholder-text">No photo yet — be first</span>
+    <div class="hero-fade"></div>
+    <div class="hero-credit" id="parkHeroCredit"></div>
+    <div class="hero-badge" id="parkHeroBadge" style="display:none;"></div>
+  </div>
+  <div class="photo-gallery" id="photoGallery"></div>
+  <div class="panel-header">
+    <h2 id="parkName">Park name</h2>
+    <div class="loc">
+      <svg class="pin-icon icon icon-sm" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span id="parkLoc">Location</span>
+    </div>
+  </div>
+  <div class="panel-stats">
+    <div class="stat"><div class="v" id="statMembers">0</div><div class="l">Members</div></div>
+    <div class="stat"><div class="v" id="statPosts">0</div><div class="l">Posts</div></div>
+    <div class="stat"><div class="v" id="statRating">0.0</div><div class="l">Rating</div></div>
+  </div>
+  <div class="equipment-wrap">
+    <div class="equipment-label">Equipment available</div>
+    <div class="equipment" id="equipment"></div>
+  </div>
+  <div class="hidden-meta" id="hiddenMeta"></div>
+  <div class="external-links" id="externalLinks"></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="feed">Feed</div>
+    <div class="tab" data-tab="meetups">Meetups</div>
+    <div class="tab" data-tab="challenges">Challenges</div>
+  </div>
+  <div class="tab-content" id="tabContent"></div>
+</div>
+
+<div class="modal-bg" id="profileModal">
+  <div class="modal">
+    <button class="panel-close" id="closeProfile" style="top:12px;right:12px;">
+      <svg class="icon" viewBox="0 0 24 24" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-head">
+      <div class="avatar-lg">JB</div>
+      <h3>JB</h3>
+      <div class="handle">@jackbrady · Dublin</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-stats">
+        <div class="stat"><div class="v">12</div><div class="l">Parks</div></div>
+        <div class="stat"><div class="v">47</div><div class="l">Posts</div></div>
+        <div class="stat"><div class="v">3</div><div class="l">Wins</div></div>
+      </div>
+      <div class="modal-section">
+        <h5>Personal Bests</h5>
+        <ul>
+          <li><span>Max pull-ups</span><b>22</b></li>
+          <li><span>Muscle-ups (set)</span><b>5</b></li>
+          <li><span>Front lever hold</span><b>9s</b></li>
+          <li><span>Dip max reps</span><b>34</b></li>
+        </ul>
+      </div>
+      <div class="modal-section" style="margin-top:16px;">
+        <h5>Recent Badges</h5>
+        <ul>
+          <li><span>Phoenix Park Pull-up King</span><b>Mar '26</b></li>
+          <li><span>30-day streak</span><b>Feb '26</b></li>
+          <li><span>5 cities visited</span><b>Jan '26</b></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="hiddenSpotModal">
+  <div class="modal">
+    <button class="panel-close" id="closeHiddenSpot" style="top:12px;right:12px;" type="button">
+      <svg class="icon" viewBox="0 0 24 24" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-head">
+      <h3>Submit a Park</h3>
+      <div class="handle">Pin the bars. It stays off the public map until verified.</div>
+    </div>
+    <form class="spot-form" id="hiddenSpotForm">
+      <div class="form-help">Location selected: <span class="map-coordinate" id="spotCoordinate">Pick a point on the map</span></div>
+      <div class="form-grid">
+        <div class="form-field full">
+          <label for="spotName">Spot name</label>
+          <input id="spotName" required maxlength="80" placeholder="e.g. Quiet pull-up bars behind the pitches" />
+        </div>
+        <div class="form-field">
+          <label for="spotArea">Area</label>
+          <input id="spotArea" required maxlength="80" placeholder="e.g. Rathmines, Dublin" />
+        </div>
+        <div class="form-field">
+          <label for="hiddenLevel">Hidden level</label>
+          <select id="hiddenLevel" required>
+            <option value="Easy to find">Easy to find</option>
+            <option value="Tucked away">Tucked away</option>
+            <option value="Local knowledge">Local knowledge</option>
+            <option value="Hard to spot">Hard to spot</option>
+          </select>
+        </div>
+        <div class="form-field full">
+          <label for="spotEquipment">Equipment</label>
+          <input id="spotEquipment" required maxlength="160" placeholder="Pull-up bars, dip bars, rings…" />
+        </div>
+        <div class="form-field full">
+          <label for="bestTime">Best time to train</label>
+          <input id="bestTime" maxlength="100" placeholder="e.g. Early morning; quiet after 7pm" />
+        </div>
+        <div class="form-field full">
+          <label for="spotNotes">Notes</label>
+          <textarea id="spotNotes" maxlength="500" placeholder="Condition, how to find it, lighting, ground surface, nearby parking…"></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" id="cancelHiddenSpot" type="button">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save for review</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="loadingMsg"><span class="spinner"></span>Loading map…</div>
+<div id="errorMsg"></div>
+
+<!-- Leaflet with three-CDN fallback -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>if (typeof L === 'undefined') document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');</script>
+<script>if (typeof L === 'undefined') document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>');</script>
+<script>
+window.addEventListener('error', function(e) {
+  const err = document.getElementById('errorMsg');
+  if (err) { err.style.display='block'; err.textContent = 'Error: ' + (e.message || 'unknown'); }
+  const lm = document.getElementById('loadingMsg'); if (lm) lm.style.display='none';
+});
+</script>
+<script>
+/* ============================================================
+   PARK DATA — verified coords (osm) + community/known (cm/kn)
+   img URLs courtesy of calisthenics.ie (community partner)
+   ============================================================ */
+const IMG = "https://img.calisthenics.ie/v7/_caliirl_/";
+const parks = [
+  // ---------- DUBLIN — OSM-verified exact coords ----------
+  { id:1,  name:"Father Collins Park", area:"Donaghmede, Dublin 13", lat:53.4044377, lng:-6.1584567, source:"osm", verified:true, equipment:["Pull-up bars","Horizontal bar","Sit-up","Parallel bars","Plyo boxes"] },
+  { id:2,  name:"Smithfield Outdoor Gym", area:"Smithfield, Dublin 7", lat:53.3494543, lng:-6.2781237, source:"osm", verified:true, equipment:["Pull-up bars","Sit-up station"] },
+  { id:3,  name:"Luke Kelly Park", area:"Sheriff Street, Dublin 1", lat:53.3508225, lng:-6.2402998, source:"osm", verified:true, equipment:["Fitness station","Pull-up bars"] },
+  { id:4,  name:"Ferryman's Crossing Outdoor Gym", area:"North Wall, Dublin 1", lat:53.3517654, lng:-6.2404814, source:"osm", verified:true, equipment:["Parallel bars","Pull-up bars"] },
+  { id:5,  name:"Watermill Road Calisthenics", area:"Raheny, Dublin 5", lat:53.3754094, lng:-6.1678446, source:"osm", verified:true, equipment:["Horizontal bar","Parallel bars"] },
+  { id:6,  name:"All Saints Road Fitness Station", area:"Raheny, Dublin 5", lat:53.3757179, lng:-6.1728553, source:"osm", verified:true, equipment:["Sit-up","Pull-up bars"] },
+  { id:7,  name:"Kilcarbery Grange Outdoor Gym", area:"Clondalkin, Dublin 22", lat:53.321406, lng:-6.4003112, source:"osm", verified:true, equipment:["Fitness station","Hyperextension","Exercise bike","Rower"] },
+  { id:8,  name:"Santry Park Fitness Station", area:"Santry, Dublin 9", lat:53.3995902, lng:-6.2470609, source:"osm", verified:true, equipment:["Fitness station","Pull-up bars"] },
+  { id:9,  name:"Santry Demesne Bars", area:"Santry, Dublin 9", lat:53.4010998, lng:-6.2503235, source:"osm", verified:true, equipment:["Pull-up bars","Parallel bars"] },
+  { id:10, name:"Canon Lillis Avenue Gym", area:"East Wall, Dublin 1", lat:53.3526168, lng:-6.2405059, source:"osm", verified:true, equipment:["Push-up","Pull-up bars"] },
+  { id:11, name:"Greenhills Fitness Station", area:"Greenhills, Dublin 12", lat:53.3210932, lng:-6.3336864, source:"osm", verified:true, equipment:["Fitness station"] },
+  { id:12, name:"Chapelizod Road Outdoor Gym", area:"Chapelizod, Dublin 20", lat:53.3463876, lng:-6.3349692, source:"osm", verified:true, equipment:["Pull-up bars","Dip bars","Parallel bars"] },
+  { id:13, name:"Dolphin Road Gym", area:"Dolphin's Barn, Dublin 12", lat:53.3347653, lng:-6.3017548, source:"osm", verified:true, equipment:["Fitness station"] },
+  { id:14, name:"Ballymun Outdoor Gym", area:"Ballymun, Dublin 9", lat:53.4072854, lng:-6.2726461, source:"osm", verified:true, equipment:["Fitness station"] },
+  { id:15, name:"Ardmore Close Gym", area:"Artane, Dublin 5", lat:53.387285, lng:-6.2206422, source:"osm", verified:true, equipment:["Fitness station"] },
+  { id:16, name:"Fettercairn Outdoor Gym", area:"Tallaght, Dublin 24", lat:53.3089412, lng:-6.3744964, source:"osm", verified:true, equipment:["Fitness station","Multi-station"] },
+  { id:17, name:"Adamstown Fitness Trail", area:"Adamstown, Dublin 22", lat:53.3438792, lng:-6.4559805, source:"osm", verified:true, equipment:["Pull-up bars","Fitness trail"] },
+  { id:18, name:"Bluebell Road Outdoor Gym", area:"Bluebell, Dublin 12", lat:53.3326797, lng:-6.3331602, source:"osm", verified:true, equipment:["Fitness station","Pull-up bars"] },
+  { id:19, name:"Clane Road Calisthenics Park", area:"Celbridge, Co. Kildare", lat:53.3368947, lng:-6.5416904, source:"osm", verified:true, equipment:["Calisthenics park","Pull-up bars","Parallel bars"] },
+  { id:20, name:"Kettles Memorial Park Gym", area:"Donabate, Co. Dublin", lat:53.4396899, lng:-6.1995897, source:"osm", verified:true, equipment:["Fitness station"] },
+  { id:21, name:"James Larkin Road Bars", area:"Clontarf, Dublin 3", lat:53.3715269, lng:-6.1670755, source:"osm", verified:true, equipment:["Pull-up bars","Vertical ladder"] },
+  { id:22, name:"Oriel Street Lower Gym", area:"North Strand, Dublin 1", lat:53.3538323, lng:-6.2411796, source:"osm", verified:true, equipment:["Fitness station"] },
+  { id:23, name:"Our Lady's Park Gym", area:"Drumcondra, Dublin 9", lat:53.3694531, lng:-6.2590797, source:"osm", verified:true, equipment:["Fitness station"] },
+
+  // ---------- DUBLIN — calisthenics.ie verified (with photos!) ----------
+  { id:30, name:"Tymon Park", area:"Tallaght, Dublin 24", lat:53.2949, lng:-6.3568, source:"cm", verified:false, img:IMG+"tymon-park-calisthenics-equipment-workout-gym-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Wall bars","Ab bench","Mini bar set","Push-up bars","Gymnastic rings","Climbing rope"] },
+  { id:31, name:"Marlay Park", area:"Rathfarnham, Dublin 16", lat:53.2789, lng:-6.2531, source:"cm", verified:false, img:IMG+"marlay-park-bodyweight-training-calisthenics-fitness-area-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars"] },
+  { id:32, name:"Herbert Park", area:"Ballsbridge, Dublin 4", lat:53.3268, lng:-6.2273, source:"cm", verified:false, img:IMG+"herbert-park-calisthenics-workout-outdoor-equipment-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars"] },
+  { id:33, name:"Albert College Park", area:"Whitehall, Dublin 9", lat:53.3848, lng:-6.2557, source:"cm", verified:false, img:IMG+"albert-college-park-calisthenics-workout-equipment-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Monkey bars","Wall bars"] },
+  { id:34, name:"St Anne's Park", area:"Raheny/Clontarf, Dublin 5", lat:53.3739, lng:-6.1773, source:"cm", verified:false, img:IMG+"st-annes-park-calisthenics-workout-equipment-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Wall bars","Mini bar set"] },
+  { id:35, name:"Cabinteely Park", area:"Cabinteely, Dublin 18", lat:53.2546, lng:-6.1581, source:"cm", verified:false, img:IMG+"cabinteely-park-calisthenics-pull-up-bars-outdoor-workout-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Mini bar set"] },
+  { id:36, name:"Liberty Park", area:"NEIC, Dublin 1", lat:53.3554, lng:-6.2390, source:"cm", verified:false, img:IMG+"liberty-park-calisthenics-workout-equipment-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Monkey bars","Wall bars","Multi bar"] },
+  { id:37, name:"Clondalkin Calisthenics Park", area:"Clondalkin, Dublin 22", lat:53.3220, lng:-6.3855, source:"cm", verified:false, img:IMG+"clondalkin-outdoor-calisthenics-workout-park-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Wall bars","Ab bench","Mini bar set","Multi bar","Flag pole","Gymnastic rings","Parallettes"] },
+  { id:38, name:"Mount Bernard Park", area:"Phibsborough, Dublin 7", lat:53.3617, lng:-6.2700, source:"cm", verified:false, img:IMG+"mount-bernard-park-calisthenics-exercise-bars-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Monkey bars","Wall bars","Ab bench"] },
+  { id:39, name:"Meadowbrook", area:"Ballinteer, Dublin 16", lat:53.2667, lng:-6.2517, source:"cm", verified:false, img:IMG+"Meadowbrook-calisthenics-park-outdoor-gym-Dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Wall bars","Ab bench","Multi bar","Gymnastic rings","Climbing rope","Plyo box"] },
+  { id:40, name:"Jobstown Park", area:"Tallaght, Dublin 24", lat:53.2890, lng:-6.3940, source:"cm", verified:false, img:IMG+"jobstown-park-outdoor-calisthenics-area-south-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Wall bars","Ab bench","Multi bar","Flag pole","Gymnastic rings","Parallettes"] },
+  { id:41, name:"Esker South", area:"Lucan, Co. Dublin", lat:53.3556, lng:-6.4533, source:"cm", verified:false, img:IMG+"esker-south-lucan-calisthenics-park-outdoor-workout-gym-dublin-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Outdoor workout gym"] },
+
+  // ---------- DUBLIN — community listed (no photo yet) ----------
+  { id:50, name:"Bushy Park Outdoor Gym", area:"Terenure, Dublin 6W", lat:53.3097, lng:-6.2954, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:51, name:"Eamonn Ceannt Park", area:"Crumlin, Dublin 12", lat:53.3265, lng:-6.3066, source:"cm", verified:false, equipment:["Monkey bars","Pull-up bars","Vertical ladder"] },
+  { id:52, name:"Ballycragh Park", area:"Firhouse, Dublin 24", lat:53.2705, lng:-6.3539, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:53, name:"Fairview Park Outdoor Gym", area:"Fairview, Dublin 3", lat:53.3631, lng:-6.2342, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars","Wall bars"] },
+  { id:54, name:"Phoenix Park Area Bars", area:"Phoenix Park, Dublin 8", lat:53.3559, lng:-6.3298, source:"kn", verified:false, equipment:["Pull-up bars","Parallel bars","Rings"] },
+  { id:55, name:"Dún Laoghaire People's Park", area:"Dún Laoghaire, Co. Dublin", lat:53.2940, lng:-6.1320, source:"kn", verified:false, equipment:["Pull-up bars","Parallel bars"] },
+  { id:56, name:"Griffeen Valley Park", area:"Lucan, Co. Dublin", lat:53.3492, lng:-6.4426, source:"cm", verified:false, equipment:["Calisthenics park","Pull-up bars"] },
+  { id:57, name:"St. Catherine's Park", area:"Lucan, Co. Dublin", lat:53.3613, lng:-6.4380, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:58, name:"Mini Calisthenics Park Lucan", area:"Lucan, Co. Dublin", lat:53.3567, lng:-6.4495, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:59, name:"Balgaddy Outdoor Gym", area:"Lucan, Co. Dublin", lat:53.3447, lng:-6.4569, source:"cm", verified:false, equipment:["Calisthenics","Bodyweight training"] },
+  { id:60, name:"Quarryvale Park", area:"Liffey Valley, Dublin 22", lat:53.3486, lng:-6.4115, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:61, name:"The Hollow", area:"Kingswood, Dublin 22", lat:53.3055, lng:-6.4093, source:"cm", verified:false, equipment:["Street workout","Pull-up bars"] },
+  { id:62, name:"Hudson Road Park", area:"Sandycove, Co. Dublin", lat:53.2880, lng:-6.1366, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:63, name:"Decathlon Outdoor Gym", area:"Ballymun, Dublin 11", lat:53.3902, lng:-6.2511, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:64, name:"Royal Canal Greenway Bars", area:"Phibsborough → Ashtown", lat:53.3676, lng:-6.2851, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:65, name:"Porterstown Park", area:"Castleknock, Dublin 15", lat:53.3759, lng:-6.4146, source:"cm", verified:false, equipment:["Pull-up bars","Calisthenics"] },
+  { id:66, name:"Mountjoy Square Park", area:"Mountjoy, Dublin 1", lat:53.3568, lng:-6.2596, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:67, name:"Beckett Park", area:"Cabra, Dublin 7", lat:53.3622, lng:-6.2942, source:"cm", verified:false, equipment:["Pull-up bars","Calisthenics bars"] },
+  { id:68, name:"Belmayne Outdoor Gym", area:"Belmayne, Dublin 13", lat:53.4090, lng:-6.1812, source:"cm", verified:false, equipment:["Pull-up bars","Calisthenics"] },
+  { id:69, name:"Clay Farm", area:"Leopardstown, Dublin 18", lat:53.2615, lng:-6.1850, source:"cm", verified:false, equipment:["Calisthenics"] },
+  { id:70, name:"Collinstown Park", area:"Clondalkin, Dublin 22", lat:53.3175, lng:-6.3938, source:"cm", verified:false, equipment:["Pull-up bars","Calisthenics"] },
+  { id:71, name:"Deer Park", area:"Howth, Co. Dublin", lat:53.3702, lng:-6.0852, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:72, name:"Knockmitten Park", area:"Ballymount, Dublin 12", lat:53.3164, lng:-6.3508, source:"cm", verified:false, equipment:["Pull-up bars","Calisthenics"] },
+  { id:73, name:"Fernhill Park", area:"Stepaside, Dublin 18", lat:53.2456, lng:-6.2098, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:74, name:"Tully Park", area:"Ballyboughal, Co. Dublin", lat:53.4860, lng:-6.3147, source:"cm", verified:false, equipment:["Street workout","Pull-up bars"] },
+  { id:75, name:"Liffey Valley Park", area:"Lucan, Dublin 20", lat:53.3517, lng:-6.4076, source:"cm", verified:false, equipment:["Outdoor calisthenics"] },
+  { id:76, name:"St James's Linear Park", area:"The Liberties, Dublin 8", lat:53.3416, lng:-6.2900, source:"cm", verified:false, equipment:["Calisthenics"] },
+  { id:77, name:"Ballyfermot Park", area:"Ballyfermot, Dublin 10", lat:53.3458, lng:-6.3661, source:"cm", verified:false, equipment:["Pull-up bars","Workout rig"] },
+  { id:78, name:"Tír na nÓg Park", area:"Tallaght, Dublin 24", lat:53.2856, lng:-6.3812, source:"cm", verified:false, equipment:["Pull-up bars","Street workout"] },
+
+  // ---------- CORK ----------
+  { id:90, name:"Blackrock Outdoor Gym", area:"Blackrock/Marina, Cork", lat:51.8907, lng:-8.4495, source:"cm", verified:false, img:IMG+"blackrock-cork-calisthenics-park-equipment-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Wall bars","Ab bench","Mini bar set","Flag pole"] },
+  { id:91, name:"Rochestown Calisthenics Park", area:"Rochestown, Cork", lat:51.8770, lng:-8.3920, source:"cm", verified:false, img:IMG+"rochestown-calisthenics-park-equipment-workout-bars-cork-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Wall bars","Ab bench","Push-up bar"] },
+  { id:92, name:"Tramore Valley Park", area:"Ballinlough, Cork", lat:51.8736, lng:-8.4570, source:"cm", verified:false, img:IMG+"tramore-valley-calisthenics-park-bodyweight-workout-cork-t1.jpg", imgCredit:"calisthenics.ie", equipment:["Pull-up bars","Dip bars","Monkey bars","Wall bars","Ab bench","Mini bar set","Push-up bar"] },
+  { id:93, name:"Ballincollig Adult Outdoor Gym", area:"Ballincollig Regional Park", lat:51.8898, lng:-8.5773, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars","Multi-station"] },
+  { id:94, name:"Marmullane Park", area:"Passage West, Cork", lat:51.8693, lng:-8.3437, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:95, name:"Popham Park", area:"Glanmire, Cork", lat:51.9230, lng:-8.4185, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:96, name:"Cork Great (Curraheen)", area:"Bishopstown, Cork", lat:51.8870, lng:-8.4858, source:"cm", verified:false, equipment:["Pull-up bars","Calisthenics"] },
+  { id:97, name:"Ballycannon Park", area:"Glanmire, Cork", lat:51.9213, lng:-8.4081, source:"cm", verified:false, equipment:["Calisthenics","Outdoor bars"] },
+  { id:98, name:"Blarney Outdoor Gym", area:"Blarney, Cork", lat:51.9326, lng:-8.5749, source:"cm", verified:false, equipment:["Pull-up bars","Outdoor gym"] },
+  { id:99, name:"Clashduv Park", area:"Bishopstown, Cork", lat:51.8838, lng:-8.5119, source:"cm", verified:false, equipment:["Calisthenics","Outdoor bars"] },
+  { id:100, name:"Kilnagleary Park", area:"Carrigaline, Cork", lat:51.8167, lng:-8.4019, source:"cm", verified:false, equipment:["Outdoor gym","Street workout"] },
+  { id:101, name:"Tory Top Park", area:"Ballyphehane, Cork", lat:51.8842, lng:-8.4882, source:"cm", verified:false, equipment:["Calisthenics bars"] },
+  { id:102, name:"Kempton Park", area:"Frankfield, Cork", lat:51.8731, lng:-8.4593, source:"cm", verified:false, equipment:["Street workout","Calisthenics"] },
+  { id:103, name:"Gerry O'Sullivan Park", area:"Mayfield, Cork", lat:51.9015, lng:-8.4361, source:"cm", verified:false, equipment:["Street workout bars"] },
+  { id:104, name:"John O'Callaghan Park", area:"Glanmire, Cork", lat:51.9183, lng:-8.4060, source:"cm", verified:false, equipment:["Outdoor gym","Calisthenics"] },
+
+  // ---------- GALWAY ----------
+  { id:110, name:"Lough Atalia Outdoor Gym", area:"Lough Atalia, Galway", lat:53.2762, lng:-9.0497, source:"cm", verified:false, equipment:["Chin-up bars","Rings"] },
+  { id:111, name:"Salthill Outdoor Fitness", area:"Salthill, Galway", lat:53.2604, lng:-9.0795, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars","Back extension","Sit-up bench"] },
+  { id:112, name:"Eyre Square Bars", area:"Eyre Square, Galway", lat:53.2745, lng:-9.0490, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:113, name:"Outdoor Fitness Doughiska", area:"Doughiska, Galway", lat:53.2825, lng:-8.9870, source:"cm", verified:false, equipment:["Pull-up bars","Parallel bars"] },
+  { id:114, name:"Rinville Park Outdoor Gym", area:"Oranmore, Co. Galway", lat:53.2417, lng:-8.9569, source:"cm", verified:false, equipment:["Multi-station"] },
+
+  // ---------- LIMERICK ----------
+  { id:120, name:"People's Park Limerick", area:"Limerick City", lat:52.6585, lng:-8.6238, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:121, name:"Mungret Exercise Zone", area:"Mungret, Limerick", lat:52.6373, lng:-8.6717, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars","Parallel bars"] },
+  { id:122, name:"Shannon Fields Outdoor Gym", area:"Shannon Fields, Limerick", lat:52.6650, lng:-8.6320, source:"cm", verified:false, equipment:["Calisthenics gym","Multi-station"] },
+
+  // ---------- WATERFORD ----------
+  { id:130, name:"People's Park Waterford", area:"Waterford City", lat:52.2593, lng:-7.1101, source:"cm", verified:false, equipment:["Pull-up bars","Ab benches","Dip bars","Steps"] },
+  { id:131, name:"Farronshooneen Park", area:"Waterford", lat:52.2566, lng:-7.1391, source:"cm", verified:false, equipment:["Calisthenics park"] },
+  { id:132, name:"Waterford Greenway Bars", area:"Kilmacthomas, Waterford", lat:52.2090, lng:-7.4317, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:133, name:"Dungarvan Outdoor Park", area:"Dungarvan, Waterford", lat:52.0894, lng:-7.6233, source:"cm", verified:false, equipment:["Pull-up bars","Dip bars"] },
+
+  // ---------- BELFAST + NI ----------
+  { id:140, name:"Victoria Park Outdoor Gym", area:"East Belfast", lat:54.6044, lng:-5.8732, source:"cm", verified:false, equipment:["Pull-up bars","Multi-station","Ab bench"] },
+  { id:141, name:"Ormeau Park Calisthenics Area", area:"Ormeau, Belfast", lat:54.5854, lng:-5.9243, source:"kn", verified:false, equipment:["Pull-up bars","Parallel bars","Rings"] },
+  { id:142, name:"Stormont Estate Outdoor Gym", area:"Stormont, Belfast", lat:54.6041, lng:-5.8302, source:"cm", verified:false, equipment:["Cardio kit","Resistance machines","Calisthenics","9-station trail"] },
+  { id:143, name:"Lagan Towpath Stations", area:"Belfast → Lisburn", lat:54.5650, lng:-5.9050, source:"cm", verified:false, equipment:["Fitness trail","Pull-up bars"] },
+  { id:144, name:"Kinnego Marina Outdoor Gym", area:"Craigavon, Co. Armagh", lat:54.4748, lng:-6.3700, source:"cm", verified:false, equipment:["Pull-up bars","Outdoor gym"] },
+
+  // ---------- KERRY ----------
+  { id:150, name:"Dingle Outdoor Exercise Park", area:"Dingle, Co. Kerry", lat:52.1408, lng:-10.2649, source:"cm", verified:false, equipment:["Pull-up bars","Street workout"] },
+  { id:151, name:"Tralee Town Park", area:"Tralee, Co. Kerry", lat:52.2693, lng:-9.7065, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:152, name:"Killarney Outdoor Gym", area:"Killarney, Co. Kerry", lat:52.0599, lng:-9.5044, source:"cm", verified:false, equipment:["Pull-up bars","Multi-station"] },
+
+  // ---------- OTHER COUNTIES ----------
+  { id:160, name:"Gorey District Park", area:"Gorey, Co. Wexford", lat:52.6720, lng:-6.2932, source:"cm", verified:false, equipment:["Calisthenics park"] },
+  { id:161, name:"Athlone Outdoor Gym", area:"Athlone, Co. Westmeath", lat:53.4239, lng:-7.9407, source:"kn", verified:false, equipment:["Pull-up bars","Multi-station"] },
+  { id:162, name:"Sligo Outdoor Gym", area:"Doorly Park, Sligo", lat:54.2620, lng:-8.4576, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:163, name:"Drogheda Riverside Bars", area:"Drogheda, Co. Louth", lat:53.7184, lng:-6.3478, source:"kn", verified:false, equipment:["Pull-up bars"] },
+  { id:164, name:"Dundalk Outdoor Gym", area:"Dundalk, Co. Louth", lat:54.0014, lng:-6.4053, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:165, name:"Letterkenny Town Park", area:"Letterkenny, Co. Donegal", lat:54.9558, lng:-7.7344, source:"kn", verified:false, equipment:["Pull-up bars"] },
+  { id:166, name:"Knocknashee Outdoor Gym", area:"Knocknashee, Co. Roscommon", lat:54.0823, lng:-8.5950, source:"cm", verified:false, equipment:["Calisthenics","Outdoor bars"] },
+  { id:167, name:"Mullingar Outdoor Gym", area:"Mullingar, Co. Westmeath", lat:53.5258, lng:-7.3402, source:"cm", verified:false, equipment:["Pull-up bars","Multi-station"] },
+  { id:168, name:"Ennis Outdoor Gym", area:"Ennis, Co. Clare", lat:52.8466, lng:-8.9871, source:"cm", verified:false, equipment:["Calisthenics park"] },
+  { id:169, name:"Clonmel Outdoor Park", area:"Clonmel, Co. Tipperary", lat:52.3553, lng:-7.7026, source:"cm", verified:false, equipment:["Calisthenics park"] },
+  { id:170, name:"Kilkenny Bars", area:"Kilkenny City", lat:52.6541, lng:-7.2448, source:"cm", verified:false, equipment:["Pull-up bars"] },
+  { id:171, name:"Westport Greenway Bars", area:"Westport, Co. Mayo", lat:53.8005, lng:-9.5230, source:"cm", verified:false, equipment:["Street workout"] },
+  { id:172, name:"Athy Outdoor Gym", area:"Athy, Co. Kildare", lat:52.9926, lng:-6.9842, source:"cm", verified:false, equipment:["Street workout"] },
+  { id:173, name:"Naas People's Park", area:"Naas, Co. Kildare", lat:53.2189, lng:-6.6669, source:"kn", verified:false, equipment:["Pull-up bars","Dip bars"] },
+  { id:174, name:"Millennium Park", area:"Naas, Co. Kildare", lat:53.2095, lng:-6.6717, source:"cm", verified:false, equipment:["Calisthenics rig"] },
+];
+
+
+/* Hidden spots saved by this browser */
+const HIDDEN_SPOTS_KEY = 'barmap.hiddenSpots.v1';
+function equipmentFromInput(value) {
+  return String(value || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+function readSavedHiddenSpots() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HIDDEN_SPOTS_KEY) || '[]');
+    return Array.isArray(saved) ? saved.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lng)) : [];
+  } catch (err) {
+    console.warn('Could not load hidden spots', err);
+    return [];
+  }
+}
+function writeSavedHiddenSpots() {
+  const hidden = parks
+    .filter(p => p.hiddenSpot)
+    .map(({ id, name, area, lat, lng, equipment, hiddenLevel, bestTime, notes, createdAt }) => ({
+      id, name, area, lat, lng, equipment, hiddenLevel, bestTime, notes, createdAt
+    }));
+  try {
+    localStorage.setItem(HIDDEN_SPOTS_KEY, JSON.stringify(hidden));
+  } catch (err) {
+    console.warn('Could not save hidden spots', err);
+  }
+}
+function makeHiddenSpot(raw) {
+  return {
+    id: raw.id || Date.now(),
+    name: raw.name,
+    area: raw.area,
+    lat: Number(raw.lat),
+    lng: Number(raw.lng),
+    source: 'hidden',
+    verified: false,
+    hiddenSpot: true,
+    hiddenLevel: raw.hiddenLevel || 'Tucked away',
+    bestTime: raw.bestTime || '',
+    notes: raw.notes || '',
+    createdAt: raw.createdAt || new Date().toISOString(),
+    equipment: Array.isArray(raw.equipment) ? raw.equipment : equipmentFromInput(raw.equipment)
+  };
+}
+
+/* Canonical source-backed parks from Calisthenics Ireland public API, fetched 2026-05-14. */
+const SOURCE_VERIFIED_PARKS = [
+  {
+    "id": 3000,
+    "name": "The Hollow",
+    "area": "Kingswood Ave, Garranstown Or Kingswood, Dublin, Ireland",
+    "lat": 53.306129665894,
+    "lng": -6.3684928692453,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/the-hollow/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/the-hollow-calisthenics-park-kingswood-south-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/the-hollow-calisthenics-park-kingswood-south-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-hollow-calisthenics-park-kingswood-tallaght-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-hollow-outdoor-gym-tallaght-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-hollow-street-workout-park-tallaght-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kingswood-bodyweight-workout-area-tallaght-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-hollow-public-exercise-area-kingswood-south-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3001,
+    "name": "Killinarden Park",
+    "area": "Killinarden Park, Killinardan, Dublin, Ireland",
+    "lat": 53.277888109998,
+    "lng": -6.382870044889,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/killinarden-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/killinarden-park-calisthenics-bodyweight-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/killinarden-park-calisthenics-bodyweight-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/outdoor-gym-killinarden-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/killinarden-park-street-workout-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/killinarden-park-calisthenics-equipment-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/killinarden-park-public-exercise-area-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/killinarden-park-bodyweight-area-south-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Climbing Rope",
+      "Dip Bars",
+      "Flag pole",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Multi Bar",
+      "Parallettes",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3002,
+    "name": "Jobstown Park",
+    "area": "Jobstown Park, Jobstown, Dublin, Ireland",
+    "lat": 53.285095100424,
+    "lng": -6.3950250380625,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/jobstown-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/jobstown-park-outdoor-calisthenics-area-south-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/jobstown-park-outdoor-calisthenics-area-south-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/jobstown-park-calisthenics-equipment-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/jobstown-park-street-workout-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/scd-leisure-tallaght-calisthenics-park-jobstown-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tallaght-leisure-centre-public-outdoor-gym-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/jobstown-park-bodyweight-exercise-area-pmi-dublin.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Gymnastic Rings",
+      "Monkey Bar",
+      "Multi Bar",
+      "Parallettes",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3003,
+    "name": "Balgaddy",
+    "area": "Balgaddy Road, Balgaddy, Lucan, County Dublin, Ireland",
+    "lat": 53.339060552504,
+    "lng": -6.4158610414769,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/balgaddy/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/balgaddy-outdoor-calisthenics-park-lucan-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/balgaddy-outdoor-calisthenics-park-lucan-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/balgaddy-calisthenics-park-lucan-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/balgaddy-street-workout-area-lucan-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/balgaddy-outdoor-gym-west-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/public-fitness-area-balgaddy-lucan-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/balgaddy-bodyweight-exercise-bars-lucan-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Gymnastic Rings",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Parallettes",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3004,
+    "name": "Quarryvale Park",
+    "area": "Quarryvale park, Quarryvale, Dublin, Ireland",
+    "lat": 53.352178529335,
+    "lng": -6.3978436495898,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/quarryvale-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/quarryvale-park-calisthenics-equipment-liffey-valley-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/quarryvale-park-calisthenics-equipment-liffey-valley-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/quarryvale-park-calisthenics-equipment-liffey-valley-pmi-1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/quarryvale-park-outdoor-gym-west-dublin-pmi-1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/quarryvale-park-public-fitness-area-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-street-workout-quarryvale-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/quarryvale-park-bodyweight-exercise-bars-dublin-pmi-1.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Gymnastic Rings",
+      "Monkey Bar",
+      "Parallettes",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3005,
+    "name": "St James’s Linear Park",
+    "area": "Fatima Luas Stop, Saint James, Dublin 8, Ireland",
+    "lat": 53.338814309934,
+    "lng": -6.2906140531468,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/st-jamess-linear-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/st-jamess-linear-park-calisthenics-workout-area-liberties-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/st-jamess-linear-park-calisthenics-workout-area-liberties-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-jamess-linear-park-calisthenics-equipment-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-liberties-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-jamess-linear-park-street-workout-area-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set"
+    ]
+  },
+  {
+    "id": 3006,
+    "name": "Esker South",
+    "area": "Newcastle Rd, Esker South, Lucan, Co. Dublin, Ireland",
+    "lat": 53.345901593716,
+    "lng": -6.4510560035706,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/esker-south-lucan/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/esker-south-lucan-calisthenics-park-outdoor-workout-gym-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/esker-south-lucan-calisthenics-park-outdoor-workout-gym-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lucan-street-workout-bars-esker-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lucan-calisthenics-workout-equipment-esker-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lucan-calisthenics-park-esker-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lucan-public-fitness-exercise-area-esker-south-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lucan-bodyweight-equipment-dip-bars-esker-south-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3007,
+    "name": "Hartstown Park",
+    "area": "Hartstown Park, Hartstown, Dublin, Ireland",
+    "lat": 53.393245375391,
+    "lng": -6.4118139012918,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/hartstown-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-calisthenics-bodyweight-exercise-blanchardstown-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-calisthenics-bodyweight-exercise-blanchardstown-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-street-workout-blanchardstown-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-calisthenics-north-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-outdoor-gym-blanchardstown-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-public-exercise-area-blanchardstown-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hartstown-park-blanchardstown-calisthenics-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Multi Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3008,
+    "name": "Tír na nÓg Park",
+    "area": "Tír na nÓg Park, Diswellstown Road, Carpenterstown, Dublin 15, Ireland",
+    "lat": 53.370281386024,
+    "lng": -6.3896656036377,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/tir-na-nog-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/tir-na-nog-park-pull-up-bars-street-workout-west-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/tir-na-nog-park-pull-up-bars-street-workout-west-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tir-na-nog-park-calisthenics-workout-area-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/diswellstown-outdoor-workout-gym-west-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/carpenterstown-calisthenics-park-tir-na-nog-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tir-na-nog-park-public-bodyweight-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tir-na-nog-park-street-workout-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Multi Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3009,
+    "name": "Porterstown Park",
+    "area": "Porterstown Park, Fernleigh Heath, Carpenterstown, Dublin 15, Ireland",
+    "lat": 53.37090725634,
+    "lng": -6.402795837706,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/porterstown-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-calisthenics-public-exercise-area-castleknock-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-calisthenics-public-exercise-area-castleknock-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-public-pull-up-bars-castleknock-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-calisthenics-equipment-castleknock-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-street-workout-castleknock-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-outdoor-gym-castleknock-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/porterstown-park-fitness-area-castleknock-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Parallettes",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3010,
+    "name": "Cork Great",
+    "area": "Cork Great, County Dublin, Ireland",
+    "lat": 53.21215380845,
+    "lng": -6.1076282563134,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/cork-great/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/cork-great-outdoor-calisthenics-park-bray-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/cork-great-outdoor-calisthenics-park-bray-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/cork-great-calisthenics-park-bray-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/cork-great-calisthenics-equipment-bray-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/street-workout-park-cork-great-bray-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/bray-park-pull-up-bars-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/bodyweight-outdoor-gym-cork-great-bray-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Multi Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3011,
+    "name": "Meadowbrook",
+    "area": "DLR Leisure Meadowbrook, Broadford Road, Ballinteer, Dublin, Ireland",
+    "lat": 53.281523833496,
+    "lng": -6.2562947743082,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/meadowbrook/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/Meadowbrook-calisthenics-park-outdoor-gym-Dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/Meadowbrook-calisthenics-park-outdoor-gym-Dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/meadowbrook-calisthenics-park-ballinteer-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/calisthenics-workout-equipment-dundrum-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/bodyweight-outdoor-gym-ballinteer-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/street-workout-park-ballinteer-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/public-exercise-space-ballinteer-dundrum-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Climbing Rope",
+      "Dip Bars",
+      "Gymnastic Rings",
+      "Multi Bar",
+      "Plyometric Box",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3012,
+    "name": "Clondalkin",
+    "area": "Clondalkin Leisure Centre, Nangor Rd Old, Clondalkin, Dublin, Ireland",
+    "lat": 53.321337383688,
+    "lng": -6.400266758964,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/clondalkin/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-outdoor-calisthenics-workout-park-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-outdoor-calisthenics-workout-park-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-calisthenics-park-west-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-public-fitness-park-monkey-bars-west-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-calisthenics-bodyweight-equipment-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-outdoor-gym-training-space-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clondalkin-street-workout-exercise-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Gymnastic Rings",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Multi Bar",
+      "Parallettes",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3013,
+    "name": "Dungarvan",
+    "area": "Fairlane, Dungarvan, Co. Waterford, Ireland",
+    "lat": 52.091303514123,
+    "lng": -7.626711913981,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/dungarvan/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/fairlane-dungarvan-calisthenics-park-waterford-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/fairlane-dungarvan-calisthenics-park-waterford-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/outdoor-gym-fairlane-dungarvan-waterford-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/dungarvan-calisthenics-park-equipment-waterford-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/waterford-calisthenics-workout-equipment-dungarvan-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/dungarvan-public-fitness-space-waterford-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/dungarvan-street-workout-park-waterford-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3014,
+    "name": "Kilcross",
+    "area": "Kilcross Road, Sandyford, Dublin, Ireland",
+    "lat": 53.269620500135,
+    "lng": -6.2293236936021,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/kilcross/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/kilcross-workout-rig-calisthenics-workout-park-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/kilcross-workout-rig-calisthenics-workout-park-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilcross-outdoor-gym-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilcross-calisthenics-workout-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/sandyford-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilcross-street-workout-bars-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Monkey Bar",
+      "Multi Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3015,
+    "name": "The Gallops",
+    "area": "The Gallops, Dublin, Ireland",
+    "lat": 53.263034657943,
+    "lng": -6.2002687592111,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/the-gallops/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/the-gallops-calisthenics-park-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/the-gallops-calisthenics-park-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-gallops-calisthenics-park-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/murphystown-public-fitness-area-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-gallops-street-workout-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/murphystown-calisthenics-equipment-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-gallops-outdoor-gym-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Monkey Bar",
+      "Multi Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3016,
+    "name": "Knocknashee",
+    "area": "Knocknashee, The Warren, County Roscommon, Ireland",
+    "lat": 53.972378812557,
+    "lng": -8.3000884581535,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/knocknashee/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/knocknashee-calisthenics-park-roscommon-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/knocknashee-calisthenics-park-roscommon-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/knocknashee-calisthenics-workout-equipment-roscommon.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/outdoor-gym-the-warren-roscommon.jpg"
+    ],
+    "equipment": [
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3017,
+    "name": "Tory Top Park",
+    "area": "Tory Top Park(Páirc Barr Thoraí), Ballyphehane, Cork, Ireland",
+    "lat": 51.885648899844,
+    "lng": -8.4744512876377,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/tory-top-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-cork-calishenics-workout-equipment-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-cork-calishenics-workout-equipment-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-bodyweight-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-calisthenics-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-pull-up-bars-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-monkey-bars-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tory-top-park-street-workout-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3018,
+    "name": "The Lough",
+    "area": "The Lough, Cork, Ireland",
+    "lat": 51.887269206922,
+    "lng": -8.4883805952402,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/the-lough/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/the-lough-calisthenics-park-equipment-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/the-lough-calisthenics-park-equipment-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lough-park-calisthenics-area-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/calisthenics-the-lough-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/the-lough-park-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lough-park-fitness-space-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/lough-park-street-workout-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3019,
+    "name": "Kilnagleary",
+    "area": "Kilnagleary, Co. Cork, Ireland",
+    "lat": 51.810649724812,
+    "lng": -8.3729082946759,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/kilnagleary/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/kilnaglery-outdoor-gym-calisthenics-park-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/kilnaglery-outdoor-gym-calisthenics-park-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilnagleary-calisthenics-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilnagleary-street-workout-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilnagleary-bodyweight-outdoor-equipment-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilnagleary-public-fitness-area-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kilnagleary-outdoor-gym-fitness-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Plyometric Box",
+      "Pull Up Bars",
+      "Push Up Bar"
+    ]
+  },
+  {
+    "id": 3020,
+    "name": "Kempton Park",
+    "area": "Kempton Park, Cork, Ireland",
+    "lat": 51.919676667098,
+    "lng": -8.4535444298502,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/kempton-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/kempton-park-calisthenics-workout-equipment-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/kempton-park-calisthenics-workout-equipment-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kempton-park-calisthenics-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kempton-park-public-fitness-space-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kempton-park-pullup-bars-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/kempton-park-cork-calisthenics-workout-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Calisthenics equipment"
+    ]
+  },
+  {
+    "id": 3021,
+    "name": "Gerry O'Sullivan Park",
+    "area": "Gerry O'Sullivan Park Playground, Saint Colmcille's Road, Cork, Ireland",
+    "lat": 51.906774406537,
+    "lng": -8.49532008409,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/gerry-osullivan-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-outdoor-calisthenics-park-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-outdoor-calisthenics-park-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-calisthenics-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-street-workout-area-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-pullup-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gerry-osullivan-park-fitness-space-pmi.jpg"
+    ],
+    "equipment": [
+      "Calisthenics equipment"
+    ]
+  },
+  {
+    "id": 3022,
+    "name": "Clashduv Park",
+    "area": "Clashduv Park, Togher, Cork, Ireland",
+    "lat": 51.881095172944,
+    "lng": -8.4957752766217,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/clashduv-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/calisthenics-workout-area-clashduv-park-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/calisthenics-workout-area-clashduv-park-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clashduv-outdoor-calisthenics-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clashduv-park-street-workout-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clashduv-park-outdoor-gym-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clashduv-park-pullup-bars-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clashduv-park-public-fitness-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Calisthenics equipment"
+    ]
+  },
+  {
+    "id": 3023,
+    "name": "Blarney",
+    "area": "Blarney, Cork, Ireland",
+    "lat": 51.929176799726,
+    "lng": -8.5557095060454,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/blarney/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/blarney-calisthenics-park-outdoor-gym-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/blarney-calisthenics-park-outdoor-gym-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blarney-outdoor-calisthenics-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blarney-public-exercise-space-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blarney-street-workout-gym-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blarney-calisthenics-workout-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blarney-outdoor-exercise-area-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3024,
+    "name": "Blackrock",
+    "area": "Blackrock, Cork, Ireland",
+    "lat": 51.898778745749,
+    "lng": -8.3983411007364,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/blackrock/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/blackrock-cork-calisthenics-park-equipment-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/blackrock-cork-calisthenics-park-equipment-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blackrock-calisthenics-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blackrock-street-workout-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/calisthenics-workout-park-blackrock-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blackrock-outdoor-gym-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/blackrock-cork-public-fitness-space-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3025,
+    "name": "Ballycannon Park",
+    "area": "Ballycannon, Cork, Ireland",
+    "lat": 51.9122189,
+    "lng": -8.5685687,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/ballycannon-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/ballycannon-park-calisthenics-equipment-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/ballycannon-park-calisthenics-equipment-cork-t1.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3026,
+    "name": "Albert College Park",
+    "area": "Albert College Park, Whitehall, Dublin, Ireland",
+    "lat": 53.383942696412,
+    "lng": -6.2617027759552,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/albert-college-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/albert-college-park-calisthenics-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/albert-college-park-calisthenics-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/albert-college-park-calisthenics-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/albert-college-park-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/albert-college-park-streetworkout-dublin.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/albert-college-park-fitness-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3027,
+    "name": "Royal Canal Bank",
+    "area": "Royal Canal Bank, Dublin, Ireland",
+    "lat": 53.355344888461,
+    "lng": -6.2722831202341,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/royal-canal-bank/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-bank-calisthenics-park-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-bank-calisthenics-park-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-bank-streetworkout-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/phibsborough-bodyweight-fitness-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-bank-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/phibsborough-dublin-city-workout-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3028,
+    "name": "Tully Park",
+    "area": "Tully Park Playground, Laughanstown, County Dublin, Ireland",
+    "lat": 53.245448782915,
+    "lng": -6.1529908556063,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/tully-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/tully-park-calisthenics-training-street-workout-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/tully-park-calisthenics-training-street-workout-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tully-park-calisthenics-cherrywood-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tully-park-streetworkout-dip-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tully-park-monkey-pullup-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tully-park-dublin-pull-up-bars-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tully-park-south-dublin-outdoor-exercise-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Monkey Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3029,
+    "name": "St.Catherine's Park",
+    "area": "St catherine's Park, County Kildare, Ireland",
+    "lat": 53.367884044568,
+    "lng": -6.4675354957581,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/st-catherines-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/st-catherines-park-calisthenics-exercise-area-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/st-catherines-park-calisthenics-exercise-area-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-catherines-park-calisthenics-blanchardstown-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-catherines-park-calisthenics-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-catherines-park-outdoor-calisthenics-blanchardstown-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-catherines-streetworkout-exercise-park-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3030,
+    "name": "Royal Canal Greenway",
+    "area": "Royal Canal Greenway, North Wall, Dublin, Ireland",
+    "lat": 53.3536619722,
+    "lng": -6.2410184270587,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/royal-canal-greenway/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-greenway-calisthenics-park-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-greenway-calisthenics-park-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-greenway-calisthenics-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-greenway-workout-area-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-greenway-exercise-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/royal-canal-streetworkout-north-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3031,
+    "name": "Beckett Park",
+    "area": "Beckett Park, Laughanstown, County Dublin, Ireland",
+    "lat": 53.249684813943,
+    "lng": -6.1606177020866,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/beckett-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-calisthenics-workout-equipment-bars-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-calisthenics-workout-equipment-bars-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-calisthenics-pullup-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-monkey-bars-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-calisthenics-dublin-cherrywood-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-bodyweight-workout-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-ab-benches-outdoor-calisthenics-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/beckett-park-outdoor-exercise-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Monkey Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3032,
+    "name": "Belmayne",
+    "area": "Belmayne, Dublin, Ireland",
+    "lat": 53.408398694225,
+    "lng": -6.1638444355663,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/belmayne-outdoor-gym/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/belmayne-calisthenics-park-outdoor-pullup-bars-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/belmayne-calisthenics-park-outdoor-pullup-bars-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/belmayne-calisthenics-park-north-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/belmayne-outdoor-exercise-fitness-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/belmayne-outdoor-workout-training-area-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/belmayne-streetworkout-dip-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/belmayne-calisthenics-park-parallettes-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3033,
+    "name": "Father Collins Park",
+    "area": "Fr. Collins Park, Hole in The Wall Road, Donaghmede, County Dublin, Ireland.",
+    "lat": 53.406507476435,
+    "lng": -6.1585422533934,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/father-collins-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/father-collins-park-calisthenics-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/father-collins-park-calisthenics-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/father-collins-park-calisthenics-dublin-north-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/father-collins-park-outdoor-fitness-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/father-collins-park-streetworkout-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/father-collins-park-exercise-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3034,
+    "name": "Mountjoy Square Park",
+    "area": "Mountjoy Square Park, Mountjoy Square, Mountjoy, Dublin, Ireland",
+    "lat": 53.356979417071,
+    "lng": -6.2574286247006,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/mountjoy-square-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/mountjoy-square-park-calisthenics-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/mountjoy-square-park-calisthenics-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/mountjoy-square-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/mountjoy-square-outdoor-exercise-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3035,
+    "name": "Ringsend Park",
+    "area": "Ringsend park, Dublin, Ireland",
+    "lat": 53.342221193003,
+    "lng": -6.2230382618967,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/rindsend-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/ringsend-park-calisthenics-bodyweight-exercise-bars-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/ringsend-park-calisthenics-bodyweight-exercise-bars-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ringsend-exercise-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ringsend-park-outdoor-gym-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ringsend-wheelchair-accessible-calisthenics-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ringsend-fitness-training-workout-area-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ringsend-dublin-streetworkout-pullup-bar-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3036,
+    "name": "Mount Bernard Park",
+    "area": "Mount Bernard Park, Phibsborough, Dublin, Ireland",
+    "lat": 53.365495207539,
+    "lng": -6.2818851995,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/mount-bernard-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/mount-bernard-park-calisthenics-exercise-bars-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/mount-bernard-park-calisthenics-exercise-bars-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/mount-bernard-park-calisthenics-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/shandon-park-outdoor-exercise-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/shandon-park-dublin-calisthenics-bars-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/mount-bernard-park-workout-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/shandon-park-streetworkout-training-area-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3037,
+    "name": "Clay Farm",
+    "area": "2-74 Clay Farm Dr, Kilgobbin, Co. Dublin, Ireland",
+    "lat": 53.254276749132,
+    "lng": -6.2021684205652,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/clay-farm/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/clay-farm-calisthenics-park-bodyweight-training-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/clay-farm-calisthenics-park-bodyweight-training-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clay-farm-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clay-farm-workout-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clay-farm-leopardstown-exercise-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3038,
+    "name": "Ireland",
+    "area": "Ireland",
+    "lat": 0,
+    "lng": 0,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/ireland/",
+    "img": "",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [],
+    "equipment": [
+      "Calisthenics equipment"
+    ]
+  },
+  {
+    "id": 3039,
+    "name": "Liberty Park",
+    "area": "Liberty Park, North Inner City, Dublin, Ireland",
+    "lat": 53.3520582,
+    "lng": -6.2521091,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/liberty-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/liberty-park-calisthenics-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/liberty-park-calisthenics-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liberty-park-calisthenics-location-dublin.webp",
+      "https://img.calisthenics.ie/v7/_caliirl_/liberty-park-street-workout-playground-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/calisthenics-park-dublin-city-centre-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/dublin-city-outdoor-exercise-equipment-pmi.jpg"
+    ],
+    "equipment": [
+      "Monkey Bar",
+      "Multi Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3040,
+    "name": "Add park",
+    "area": "Ireland",
+    "lat": 0,
+    "lng": 0,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/add-park/",
+    "img": "",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [],
+    "equipment": [
+      "Calisthenics equipment"
+    ]
+  },
+  {
+    "id": 3041,
+    "name": "Ballyfermot Park",
+    "area": "Ballyfermot People's Park, Blackditch Drive, Drumfinn, Dublin 10, Ireland",
+    "lat": 53.3434594,
+    "lng": -6.3631704,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/ballyfermot-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-park-workout-rig-calisthenics-exercise-bars-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-park-workout-rig-calisthenics-exercise-bars-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-peoples-park-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-peoples-park-calisthenics-dublin-ireland-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-park-calisthenics-pull-up-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-park-public-fitness-space-dip-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballyfermot-peoples-park-street-workout-calisthenics-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Multi Bar",
+      "Pull Up Bars",
+      "Push Up Bar"
+    ]
+  },
+  {
+    "id": 3042,
+    "name": "Collinstown Park",
+    "area": "Collinstown, Dublin, Ireland",
+    "lat": 53.343120341588,
+    "lng": -6.3889144211182,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/collinstown-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/collinstown-park-calisthenics-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/collinstown-park-calisthenics-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/collinstown-park-dublin-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/collinstown-dublin-outdoor-gym-dip-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/collinstown-dublin-street-workout-park-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Multi Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3043,
+    "name": "Knockmitten Park",
+    "area": "Knockmitten, Dublin, Ireland",
+    "lat": 53.326142258308,
+    "lng": -6.3765877275085,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/knockmitten-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/knockmitten-calisthenics-park-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/knockmitten-calisthenics-park-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/knockmitten-park-dublin-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/knockmitten-dublin-calisthenics-park-dip-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/knockmitten-dublin-street-workout-park-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Multi Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3044,
+    "name": "Rochestown",
+    "area": "Rochestown, Cork, Ireland",
+    "lat": 51.877280820869,
+    "lng": -8.3916234970093,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/rochestown/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/rochestown-calisthenics-park-equipment-workout-bars-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/rochestown-calisthenics-park-equipment-workout-bars-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/rochestown-calisthenics-park-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3045,
+    "name": "Murphy's Farm",
+    "area": "Murphy's Farm, Cork, Ireland",
+    "lat": 51.878500654882,
+    "lng": -8.5380693193268,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/murphys-farm/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/murphys-farm-cork-calisthenics-park-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/murphys-farm-cork-calisthenics-park-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/murphys-farm-street-workout-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/murphys-farm-calisthenics-park-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3046,
+    "name": "River Lee",
+    "area": "47 Fionn Laoi, Carrigrohane, Ballincollig, Co. Cork, P31 P710, Ireland",
+    "lat": 51.89372211992,
+    "lng": -8.575826883316,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/river-lee/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/river-lee-calisthenics-park-streetworkout-gym-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/river-lee-calisthenics-park-streetworkout-gym-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/river-lee-walk-street-workout-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/river-lee-calisthenics-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/river-lee-walk-calisthenics-park-cork-outdoor-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3047,
+    "name": "St.Anne's Park",
+    "area": "St Anne's Park, Clontarf East, Raheny, County Dublin, Ireland",
+    "lat": 53.375064378739,
+    "lng": -6.1680471356293,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/st-annes-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/st-annes-park-calisthenics-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/st-annes-park-calisthenics-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-annes-park-calisthenics-park-north-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-annes-park-street-workout-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-annes-park-calisthenics-pullup-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/st-annes-park-calisthenics-dip-bar-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3048,
+    "name": "Decathlon",
+    "area": "Decathlon Ballymun, Decathlon, Saint Margaret's Road, Ballymun, Dublin, Ireland",
+    "lat": 53.407498078106,
+    "lng": -6.2723779678345,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/decathlon/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/decathlon-calisthenics-outdoor-bodyweight-training-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/decathlon-calisthenics-outdoor-bodyweight-training-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/decathlon-calisthenics-park-north-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/decathlon-outdoor-gym-pull-up-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/decathlon-calisthenics-park-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/decathlon-street-workout-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/decathlon-public-fitness-area-dip-bar-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar"
+    ]
+  },
+  {
+    "id": 3049,
+    "name": "Clontarf",
+    "area": "Clontarf, Dublin, Ireland",
+    "lat": 53.358811837484,
+    "lng": -6.1885341253834,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/clontarf/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/clontarf-street-workout-calisthenics-park-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/clontarf-street-workout-calisthenics-park-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clontarf-calisthenics-park-north-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clontarf-street-workout-park-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clontarf-calisthenics-park-pull-up-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clontarf-public-fitness-area-dip-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/clontarf-street-workout-park-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3050,
+    "name": "John O'Callaghan Park",
+    "area": "John O'Callaghan Park, Cork, Ireland",
+    "lat": 51.927919390917,
+    "lng": -8.3945975727738,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/john-ocallaghan-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/glanmire-park-calisthenics-equipment-outdoor-gym-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/glanmire-park-calisthenics-equipment-outdoor-gym-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/glanmire-park-calisthenics-park-cork-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/glanmire-park-street-workout-park-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Flag pole",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3051,
+    "name": "Marlay Park",
+    "area": "Marlay Park, Grange Road, Rathfarnham, Dublin 16, Ireland",
+    "lat": 53.275068627357,
+    "lng": -6.2641322844162,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/marlay-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/marlay-park-bodyweight-training-calisthenics-fitness-area-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/marlay-park-bodyweight-training-calisthenics-fitness-area-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/marlay-park-calisthenics-park-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/marlay-park-outdoor-gym-pull-up-bar-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3052,
+    "name": "Deer Park",
+    "area": "Deerpark, 18 Mount Anville Rd, Stillorgan, Dublin, Ireland",
+    "lat": 53.294815663698,
+    "lng": -6.2166176683006,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/deer-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/deer-park-calisthenics-equipment-bodyweight-exercise-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/deer-park-calisthenics-equipment-bodyweight-exercise-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/deer-park-outdoor-monkey-bar-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/deer-park-outdoor-gym-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/deer-park-calisthenics-park-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar"
+    ]
+  },
+  {
+    "id": 3053,
+    "name": "Fernhill Park",
+    "area": "Fernhill Park & Gardens, Enniskerry Road, Newtownlittle, Dublin, Ireland",
+    "lat": 53.2590572,
+    "lng": -6.2282979,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/fernhill-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-pull-up-bars-calisthenics-workout-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-pull-up-bars-calisthenics-workout-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-calisthenics-park-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-outdoor-gym-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-monkey-bar-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-pull-up-bar-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/fernhill-park-street-workout-ab-bench-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Climbing Rope",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3054,
+    "name": "Liffey Valley Park",
+    "area": "Liffey Valley Park, Chapelizod, Dublin, Ireland",
+    "lat": 53.3463852,
+    "lng": -6.3370061,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/liffey-valley-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-calisthenics-exercise-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-calisthenics-exercise-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-outdoor-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-calisthenics-dublin-city-centre-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-street-workout-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/liffey-valley-park-outdoor-gym-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar"
+    ]
+  },
+  {
+    "id": 3055,
+    "name": "Ballycragh Park",
+    "area": "Ballycragh Park, Dublin, Ireland",
+    "lat": 53.2738284,
+    "lng": -6.3428711,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/ballycragh-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/ballycragh-park-calisthenics-bodyweight-training-gym-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/ballycragh-park-calisthenics-bodyweight-training-gym-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballycragh-park-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballycragh-park-public-outdoor-dip-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/ballycragh-park-outdoor-gym-south-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3056,
+    "name": "Eamonn Ceannt Park",
+    "area": "Eamonn Ceannt Park, Harold's Cross, Dublin, Ireland",
+    "lat": 53.3231477,
+    "lng": -6.2922037,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/eamonn-ceannt-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/eamonn-ceannt-park-exercise-calisthenics-workout-bars-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/eamonn-ceannt-park-exercise-calisthenics-workout-bars-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/eamonn-ceannt-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/eamonn-ceannt-park-monkey-bar-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3057,
+    "name": "Herbert Park",
+    "area": "Herbert Park Hotel and Park Residence, Ballsbridge Terrace, Ballsbridge, Dublin 4, Ireland",
+    "lat": 53.325859423496,
+    "lng": -6.233612344458,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/herbert-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/herbert-park-calisthenics-workout-outdoor-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/herbert-park-calisthenics-workout-outdoor-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/herbert-park-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/herbert-park-outdoor-gym-dip-bar-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3058,
+    "name": "Tramore Valley",
+    "area": "Tramore Valley Park, Ballinlough, Cork, Ireland",
+    "lat": 51.878233369887,
+    "lng": -8.4626487080734,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/tramore-valley/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-calisthenics-park-bodyweight-workout-cork-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-calisthenics-park-bodyweight-workout-cork-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-park-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-park-pull-up-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-park-dip-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tramore-valley-park-parallettes-cork-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3059,
+    "name": "Millennium Park",
+    "area": "Millennium Park, Blanchardstown Road South, Coolmine, Dublin 15, Ireland",
+    "lat": 53.390628414369,
+    "lng": -6.396597311084,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/millennium-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-calisthenics-training-exercise-rig-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-calisthenics-training-exercise-rig-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-street-workout-monkey-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-pullup-bar-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-public-fitness-space-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/millennium-park-outdoor-gym-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3060,
+    "name": "Gaels-Drumfinn Park",
+    "area": "Gaels-Drumfinn Avenue Park, Chapelizod Bypass, Redcowfarm, Dublin, Ireland",
+    "lat": 53.34724854112,
+    "lng": -6.3528978920975,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/gaels-drumfinn-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/gaels-drumfinn-park-outdoor-calisthenics-training-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/gaels-drumfinn-park-outdoor-calisthenics-training-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gaels-drumfinn-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gaels-drumfinn-park-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gaels-drumfinn-park-pull-up-bar-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/gaels-drumfinn-park-calisthenics-ballyfermot-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Pull Up Bars",
+      "Push Up Bar"
+    ]
+  },
+  {
+    "id": 3061,
+    "name": "Tymon Park",
+    "area": "Tymon Park, Tallaght, Dublin, Ireland",
+    "lat": 53.30468771648,
+    "lng": -6.3431606532412,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/tymon-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-calisthenics-equipment-workout-gym-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-calisthenics-equipment-workout-gym-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-calisthenics-park-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-monkey-bar-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-outdoor-gymnastics-rings-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-public-fitness-space-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/tymon-park-outdoor-gym-south-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Climbing Rope",
+      "Dip Bars",
+      "Gymnastic Rings",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Push Up Bar",
+      "Wall Bars"
+    ]
+  },
+  {
+    "id": 3062,
+    "name": "Cabinteely Park",
+    "area": "Bray Rd, Cabinteely, Dublin 18",
+    "lat": 53.260183487953,
+    "lng": -6.1543117780735,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/cabinteely-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/cabinteely-park-calisthenics-pull-up-bars-outdoor-workout-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/cabinteely-park-calisthenics-pull-up-bars-outdoor-workout-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/cabinteely-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/cabinteely-park-outdoor-exercise-equipment-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/cabinteely-park-monkey-bar-south-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/cabinteely-park-street-workout-south-dublin-pmi.jpg"
+    ],
+    "equipment": [
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars"
+    ]
+  },
+  {
+    "id": 3063,
+    "name": "Hudson Road Park",
+    "area": "Hudson Rd, Sandycove, Dublin, Ireland",
+    "lat": 53.285441843192,
+    "lng": -6.122428910159,
+    "source": "ci",
+    "verified": true,
+    "sourceName": "Calisthenics Ireland",
+    "sourceUrl": "https://calisthenics.ie/calisthenics-parks/hudson-road-park/",
+    "img": "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-calisthenics-park-workout-equipment-dublin-t1.jpg",
+    "imgCredit": "calisthenics.ie",
+    "gallery": [
+      "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-calisthenics-park-workout-equipment-dublin-t1.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-park-calisthenics-park-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-park-public-fitness-space-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-park-monkey-bar-dublin-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-park-outdoor-gym-pmi.jpg",
+      "https://img.calisthenics.ie/v7/_caliirl_/hudson-road-park-outdoor-gym-ab-bench-pmi.jpg"
+    ],
+    "equipment": [
+      "Ab Bench",
+      "Climbing Rope",
+      "Dip Bars",
+      "Mini Bar Set",
+      "Monkey Bar",
+      "Pull Up Bars",
+      "Wall Bars"
+    ]
+  }
+];
+
+function normalizeParkName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(outdoor|gym|calisthenics|park|area|bars|fitness|station|trail|workout|peoples|people s)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function parkDistanceKm(a, b) {
+  const toRad = n => n * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+function mergeSourceVerifiedParks() {
+  const byName = new Map(parks.map(p => [normalizeParkName(p.name), p]));
+  SOURCE_VERIFIED_PARKS.forEach(sourcePark => {
+    const existing = byName.get(normalizeParkName(sourcePark.name));
+    if (existing) {
+      Object.assign(existing, sourcePark, { id: existing.id });
+    } else {
+      parks.push({ ...sourcePark });
+    }
+  });
+
+  const sourceBacked = parks
+    .filter(p => p.sourceUrl || p.source === 'osm')
+    .sort((a, b) => (b.sourceUrl ? 1 : 0) - (a.sourceUrl ? 1 : 0));
+  const deduped = [];
+  sourceBacked.forEach(p => {
+    const duplicate = deduped.some(existing => parkDistanceKm(existing, p) < 0.075);
+    if (!duplicate) deduped.push(p);
+  });
+  parks.length = 0;
+  parks.push(...deduped.sort((a, b) => a.name.localeCompare(b.name)));
+}
+mergeSourceVerifiedParks();
+
+/* Local submissions are stored for review only. They are not added to the public map until source-verified. */
+
+/* Generate sample social data per park */
+const samplePosts = [
+  ["Hit a new PB today — 18 strict pull-ups.", ["Pull-ups"]],
+  ["Sunday session crew was 12 deep today. Great vibes.", ["Group"]],
+  ["Beginners welcome! Saturday morning intro every week at 9am. Free.", ["Beginner"]],
+  ["Anyone got tips for getting my first muscle-up?", ["Help"]],
+  ["Met some legends here today. Community is the best.", []],
+  ["Hidden gem. Pop in for a quick set.", []],
+  ["Anyone keen on a 6am session before work?", ["Group"]],
+  ["Started front-lever progression. Finally got 8s tuck hold.", ["Skills"]],
+  ["Free coaching for kids Sat 11am. Bring the family.", ["Kids"]],
+  ["Sunset session was unreal.", []],
+];
+const sampleUsers = ["Aine P","Eoin K","Sarah B","Niamh R","Tomás","Rory M","Lisa K","Dec O","Karen D","Paul G","Donncha","Méabh","Fionn","Grace M","Shauna","Holly","Adam M","Cathal","Jamie L","Orla"];
+const sampleTimes = ["2h ago","5h ago","Yesterday","2 days ago","3 days ago","4 days ago","1 week ago"];
+const challengeTypes = [
+  { name:"Max Pull-ups (1 set)", unit:"reps", baseHigh:28 },
+  { name:"Max Dips (1 set)", unit:"reps", baseHigh:40 },
+  { name:"L-sit Hold", unit:"sec", baseHigh:35 },
+  { name:"Plank Hold", unit:"sec", baseHigh:250 },
+  { name:"Muscle-up Ladder", unit:"reps", baseHigh:9 },
+  { name:"Handstand Hold", unit:"sec", baseHigh:60 },
+];
+
+function seeded(i) { return Math.abs(Math.sin(i*9999)); }
+parks.forEach(p => {
+  p.rating = (4.0 + seeded(p.id)*0.9).toFixed(1);
+  p.members = 30 + Math.floor(seeded(p.id+1)*380);
+  const numPosts = 1 + Math.floor(seeded(p.id+2)*4);
+  p.feed = [];
+  for (let i = 0; i < numPosts; i++) {
+    const post = samplePosts[Math.floor(seeded(p.id+i*3)*samplePosts.length)];
+    p.feed.push({
+      user: sampleUsers[Math.floor(seeded(p.id+i*7)*sampleUsers.length)],
+      color: 1 + Math.floor(seeded(p.id+i*11)*5),
+      time: sampleTimes[Math.floor(seeded(p.id+i*13)*sampleTimes.length)],
+      text: post[0], tags: post[1]
+    });
+  }
+  if (p.hiddenSpot) {
+    p.members = 1;
+    p.rating = 'New';
+    p.feed = [{
+      user: 'JB', color: 3, time: 'just now',
+      text: p.notes ? `Hidden spot marked. ${p.notes}` : 'Hidden spot marked. Needs community photos and quality checks.',
+      tags: ['Hidden spot', p.hiddenLevel, p.bestTime].filter(Boolean)
+    }];
+  }
+  p.meetups = [];
+  const numMeet = Math.floor(seeded(p.id+20)*3.5);
+  const monthAbbrev = ["MAY","JUN"];
+  for (let i = 0; i < numMeet; i++) {
+    p.meetups.push({
+      date: { m: monthAbbrev[Math.floor(seeded(p.id+i*5+30)*monthAbbrev.length)], d: 13 + Math.floor(seeded(p.id+i*7+40)*18) },
+      title: ["Sunday Power Session","Beginners Welcome","Skills Clinic","Weekend Throwdown","Mass Workout","Sunset Session"][Math.floor(seeded(p.id+i*9+50)*6)],
+      who: sampleUsers[Math.floor(seeded(p.id+i*11+60)*sampleUsers.length)],
+      going: 4 + Math.floor(seeded(p.id+i*13+70)*30)
+    });
+  }
+  p.challenges = [];
+  const numCh = 1 + Math.floor(seeded(p.id+100)*3);
+  const used = new Set();
+  for (let i = 0; i < numCh; i++) {
+    let cIdx = Math.floor(seeded(p.id+i*17+110)*challengeTypes.length);
+    while (used.has(cIdx)) cIdx = (cIdx+1) % challengeTypes.length;
+    used.add(cIdx);
+    const ct = challengeTypes[cIdx];
+    const top = ct.baseHigh - Math.floor(seeded(p.id+i*19)*6);
+    const board = [];
+    for (let j = 0; j < 4 + Math.floor(seeded(p.id+i*23)*3); j++) {
+      board.push([ sampleUsers[Math.floor(seeded(p.id+i*29+j*31)*sampleUsers.length)], Math.max(1, top - j*2 - Math.floor(seeded(p.id+i*33+j*37)*3)) ]);
+    }
+    p.challenges.push({ name: ct.name, unit: ct.unit, board });
+  }
+});
+
+/* ============================================================
+   MAP
+   ============================================================ */
+if (typeof L === 'undefined') {
+  document.getElementById('errorMsg').style.display='block';
+  document.getElementById('errorMsg').textContent='Map library failed to load. Check your internet connection.';
+  document.getElementById('loadingMsg').style.display='none';
+  throw new Error('Leaflet missing');
+}
+
+const map = L.map('map', { zoomControl: true }).setView([53.4, -7.9], 7);
+document.getElementById('loadingMsg').style.display='none';
+
+const satelliteLayer = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution: 'Esri, Maxar, Earthstar Geographics', maxZoom: 19 }
+);
+const satelliteLabels = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 19, opacity: 0.85 }
+);
+const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  maxZoom: 19
+});
+const streetFallbackLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  maxZoom: 19
+});
+
+const satGroup = L.layerGroup([satelliteLayer, satelliteLabels]);
+satGroup.addTo(map);
+
+let satelliteTileErrors = 0;
+let darkTileErrors = 0;
+let streetTileErrors = 0;
+
+function setLayerButtons(active) {
+  document.getElementById('btnSat').classList.toggle('active', active === 'satellite');
+  document.getElementById('btnMap').classList.toggle('active', active === 'map');
+}
+function showMapNotice(message) {
+  const err = document.getElementById('errorMsg');
+  err.style.display = 'block';
+  err.textContent = message;
+  window.clearTimeout(showMapNotice.timer);
+  showMapNotice.timer = window.setTimeout(() => {
+    err.style.display = 'none';
+  }, 5200);
+}
+function removeBaseLayers() {
+  map.removeLayer(satGroup);
+  map.removeLayer(darkLayer);
+  map.removeLayer(streetFallbackLayer);
+}
+function showSatelliteLayer() {
+  removeBaseLayers();
+  satGroup.addTo(map);
+  setLayerButtons('satellite');
+}
+function showMapLayer(useStreetFallback = false) {
+  removeBaseLayers();
+  (useStreetFallback ? streetFallbackLayer : darkLayer).addTo(map);
+  setLayerButtons('map');
+}
+function fallBackFromSatellite() {
+  if (!map.hasLayer(satGroup)) return;
+  showMapLayer();
+  showMapNotice('Satellite imagery did not load, so BARMAP switched to the street map.');
+}
+function fallBackFromDarkMap() {
+  if (!map.hasLayer(darkLayer)) return;
+  showMapLayer(true);
+  showMapNotice('The dark map tiles did not load, so BARMAP switched to the backup street map.');
+}
+satelliteLayer.on('tileerror', () => {
+  satelliteTileErrors += 1;
+  if (satelliteTileErrors >= 3) fallBackFromSatellite();
+});
+satelliteLabels.on('tileerror', () => {
+  satelliteTileErrors += 1;
+  if (satelliteTileErrors >= 3) fallBackFromSatellite();
+});
+darkLayer.on('tileerror', () => {
+  darkTileErrors += 1;
+  if (darkTileErrors >= 3) fallBackFromDarkMap();
+});
+streetFallbackLayer.on('tileerror', () => {
+  streetTileErrors += 1;
+  if (streetTileErrors === 3) showMapNotice('Map tiles are not loading. Check the internet connection or content blocker.');
+});
+
+document.getElementById('btnSat').onclick = () => {
+  showSatelliteLayer();
+};
+document.getElementById('btnMap').onclick = () => {
+  showMapLayer();
+};
+
+/* Custom SVG marker — calisthenics rig in a pin */
+function makeMarkerSVG(verified, hidden) {
+  const gradId = hidden ? 'gH' : (verified ? 'gV' : 'gR');
+  const c1 = hidden ? '#ffc83a' : (verified ? '#45e09c' : '#ff3a2f');
+  const c2 = hidden ? '#ffe17a' : (verified ? '#6ce8b8' : '#ff7d68');
+  return `
+    <svg width="30" height="38" viewBox="0 0 30 38" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${c2}"/><stop offset="1" stop-color="${c1}"/>
+      </linearGradient></defs>
+      <path d="M15 0 C6.7 0 0 6.7 0 15 C0 25 15 38 15 38 C15 38 30 25 30 15 C30 6.7 23.3 0 15 0 Z"
+            fill="url(#${gradId})" stroke="rgba(0,0,0,.45)" stroke-width="1"/>
+      <circle cx="15" cy="14" r="9" fill="#08080a"/>
+      <line x1="10" y1="10" x2="20" y2="10" stroke="${c2}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="10.5" y1="10" x2="10.5" y2="18" stroke="${c2}" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="19.5" y1="10" x2="19.5" y2="18" stroke="${c2}" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>`;
+}
+
+const markers = {};
+function addParkMarker(p) {
+  if (markers[p.id]) return markers[p.id];
+  const pinClass = `bar-pin${p.verified ? ' verified' : ''}${p.hiddenSpot ? ' hidden' : ''}`;
+  const icon = L.divIcon({
+    className: 'bar-pin-wrap',
+    html: `<div class="${pinClass}">${makeMarkerSVG(p.verified, p.hiddenSpot)}</div>`,
+    iconSize: [30, 38], iconAnchor: [15, 38]
+  });
+  const m = L.marker([p.lat, p.lng], { icon }).addTo(map)
+    .bindTooltip(`<b>${escapeHtml(p.name)}</b><br><span style="color:#888">${escapeHtml(p.area)}</span>`, { direction: 'top', offset: [0, -32] })
+    .on('click', () => openPark(p.id));
+  markers[p.id] = m;
+  return m;
+}
+function updateParkCount() {
+  document.getElementById('visibleCount').textContent = parks.length;
+}
+parks.forEach(addParkMarker);
+updateParkCount();
+
+/* ============================================================
+   SIDE PANEL
+   ============================================================ */
+const panel = document.getElementById('sidePanel');
+const tabContent = document.getElementById('tabContent');
+let currentPark = null;
+let currentTab = 'feed';
+
+function openPark(id) {
+  const p = parks.find(x => x.id === id);
+  if (!p) return;
+  currentPark = p;
+
+  // Hero
+  const hero = document.getElementById('parkHero');
+  const credit = document.getElementById('parkHeroCredit');
+  const badge = document.getElementById('parkHeroBadge');
+  const gallery = document.getElementById('photoGallery');
+  if (p.img) {
+    hero.classList.remove('empty');
+    hero.style.backgroundImage = `url("${p.img}")`;
+    credit.textContent = p.imgCredit ? `Photo: ${p.imgCredit}` : '';
+  } else {
+    hero.classList.add('empty');
+    hero.style.backgroundImage = '';
+    credit.textContent = '';
+  }
+  const galleryImages = (p.gallery || []).filter(Boolean);
+  if (galleryImages.length) {
+    gallery.classList.add('show');
+    gallery.innerHTML = galleryImages.map((src, idx) => `
+      <button class="photo-thumb${idx === 0 ? ' active' : ''}" type="button" title="Photo ${idx + 1}" style="background-image:url('${escapeHtml(src)}')" data-img="${escapeHtml(src)}"></button>
+    `).join('');
+    gallery.querySelectorAll('.photo-thumb').forEach(btn => {
+      btn.onclick = () => {
+        hero.classList.remove('empty');
+        hero.style.backgroundImage = `url("${btn.dataset.img}")`;
+        gallery.querySelectorAll('.photo-thumb').forEach(x => x.classList.remove('active'));
+        btn.classList.add('active');
+      };
+    });
+  } else {
+    gallery.classList.remove('show');
+    gallery.innerHTML = '';
+  }
+  if (p.hiddenSpot) {
+    badge.style.display = 'flex';
+    badge.innerHTML = `Hidden spot`;
+    badge.classList.add('community');
+  } else if (p.verified) {
+    const verifiedLabel = p.sourceName ? `${p.sourceName} verified` : 'OSM verified';
+    badge.style.display = 'flex';
+    badge.innerHTML = `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> ${escapeHtml(verifiedLabel)}`;
+    badge.classList.remove('community'); badge.style.background = ''; badge.style.color = '';
+  } else if (p.img) {
+    badge.style.display = 'flex';
+    badge.innerHTML = `Community spot`;
+    badge.classList.add('community');
+  } else {
+    badge.style.display = 'none';
+  }
+
+  document.getElementById('parkName').textContent = p.name;
+  document.getElementById('parkLoc').textContent = p.area;
+  document.getElementById('statMembers').textContent = p.members;
+  document.getElementById('statPosts').textContent = p.feed.length;
+  document.getElementById('statRating').innerHTML = p.rating + ' <span class="unit">★</span>';
+  document.getElementById('equipment').innerHTML = p.equipment.map(e => `<span class="chip">${escapeHtml(e)}</span>`).join('');
+
+  const hiddenMeta = document.getElementById('hiddenMeta');
+  if (p.hiddenSpot) {
+    hiddenMeta.classList.add('show');
+    hiddenMeta.innerHTML = `
+      <span class="chip">Hidden level: ${escapeHtml(p.hiddenLevel || 'Tucked away')}</span>
+      ${p.bestTime ? `<span class="chip">Best time: ${escapeHtml(p.bestTime)}</span>` : ''}
+    `;
+  } else {
+    hiddenMeta.classList.remove('show');
+    hiddenMeta.innerHTML = '';
+  }
+
+  const gmapsDir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+  const gmapsView = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
+  const osmUrl = `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=19/${p.lat}/${p.lng}`;
+  document.getElementById('externalLinks').innerHTML = `
+    ${p.sourceUrl ? `<a href="${p.sourceUrl}" target="_blank">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Source
+    </a>` : ''}
+    <a href="${gmapsDir}" target="_blank">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Directions
+    </a>
+    <a href="${gmapsView}" target="_blank">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      Street view
+    </a>
+    <a href="${osmUrl}" target="_blank">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="1,6 1,22 8,18 16,22 23,18 23,2 16,6 8,2"/></svg>
+      Map data
+    </a>
+  `;
+
+  panel.classList.add('open');
+  renderTab();
+  map.flyTo([p.lat, p.lng], 17, { duration: .8 });
+}
+
+function renderTab() {
+  if (!currentPark) return;
+  const p = currentPark;
+  if (currentTab === 'feed') {
+    tabContent.innerHTML = `
+      <div class="composer">
+        <input id="newPostInput" placeholder="Share a workout, ask a question…" />
+        <button class="btn-primary btn" id="postBtn">Post</button>
+      </div>
+      ${p.feed.map(f => renderPost(f)).join('')}
+    `;
+    document.getElementById('postBtn').onclick = () => {
+      const inp = document.getElementById('newPostInput');
+      const text = inp.value.trim(); if (!text) return;
+      p.feed.unshift({ user:"JB", color:1, time:"just now", text, tags:[] });
+      renderTab();
+      document.getElementById('statPosts').textContent = p.feed.length;
+    };
+  } else if (currentTab === 'meetups') {
+    if (p.meetups.length === 0) {
+      tabContent.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--muted);font-size:13px;">No meetups yet.<br><br><button class="btn-primary btn" onclick="alert('Coming soon!')">+ Host a meetup</button></div>`;
+    } else {
+      tabContent.innerHTML = `
+        <button class="btn-primary btn" style="margin-bottom:14px;width:100%;justify-content:center;" onclick="alert('Coming soon!')">+ Host a meetup</button>
+        ${p.meetups.map((m,i) => renderMeetup(m, i)).join('')}
+      `;
+    }
+  } else if (currentTab === 'challenges') {
+    tabContent.innerHTML = p.challenges.map(c => renderChallenge(c)).join('');
+  }
+}
+
+function renderPost(f) {
+  const initials = f.user.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+  return `
+    <div class="post">
+      <div class="post-head">
+        <div class="avatar-sm c${f.color}">${initials}</div>
+        <div class="meta"><b>${escapeHtml(f.user)}</b><br><span class="time">${f.time}</span></div>
+      </div>
+      <div class="post-body">${escapeHtml(f.text)}</div>
+      ${f.tags && f.tags.length ? `<div style="margin-top:8px;">${f.tags.map(t=>`<span class="workout-tag">${t}</span>`).join('')}</div>` : ''}
+      <div class="post-foot">
+        <span class="action"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> ${Math.floor(seeded(f.user.length+f.text.length)*40+3)}</span>
+        <span class="action"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> ${Math.floor(seeded(f.user.length*2+f.text.length)*8)}</span>
+        <span class="action"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share</span>
+      </div>
+    </div>`;
+}
+
+function renderMeetup(m, idx) {
+  return `
+    <div class="meetup">
+      <div class="date"><div class="m">${m.date.m}</div><div class="d">${m.date.d}</div></div>
+      <div class="info">
+        <h4>${m.title}</h4>
+        <p>Hosted by ${m.who}</p>
+        <div class="rsvp">
+          <button class="rsvp-btn" data-idx="${idx}" onclick="rsvp(${idx}, this)">I'm in</button>
+          <span class="going-count">${m.going} going</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function rsvp(idx, btn) {
+  if (btn.classList.contains('going')) {
+    btn.classList.remove('going'); btn.textContent = "I'm in";
+    currentPark.meetups[idx].going -= 1;
+  } else {
+    btn.classList.add('going'); btn.textContent = "Going";
+    currentPark.meetups[idx].going += 1;
+  }
+  btn.nextElementSibling.textContent = `${currentPark.meetups[idx].going} going`;
+}
+
+function renderChallenge(c) {
+  return `
+    <div class="challenge">
+      <div class="challenge-head">
+        <h4>${c.name}</h4>
+        <span class="badge">${c.unit}</span>
+      </div>
+      <div class="leaderboard">
+        ${c.board.map((row, i) => `<div class="lb-row r${i+1}"><div class="lb-rank">${i+1}</div><div class="lb-name">${escapeHtml(row[0])}</div><div class="lb-score">${row[1]}</div></div>`).join('')}
+      </div>
+      <button class="btn btn-ghost" style="width:100%;margin-top:10px;justify-content:center;" onclick="submitScore('${c.name.replace(/'/g,'')}')">Submit your score</button>
+    </div>`;
+}
+
+function submitScore(name) {
+  const v = prompt(`Enter your score for "${name}":`);
+  if (!v || isNaN(parseFloat(v))) return;
+  const c = currentPark.challenges.find(x => x.name.replace(/'/g,'') === name);
+  if (!c) return;
+  c.board.push(["JB", parseFloat(v)]);
+  c.board.sort((a,b) => b[1] - a[1]);
+  c.board = c.board.slice(0, 8);
+  renderTab();
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+document.getElementById('closePanel').onclick = () => panel.classList.remove('open');
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  currentTab = t.dataset.tab;
+  renderTab();
+});
+
+document.getElementById('profileBtn').onclick = () => document.getElementById('profileModal').classList.add('open');
+document.getElementById('closeProfile').onclick = () => document.getElementById('profileModal').classList.remove('open');
+document.getElementById('profileModal').onclick = (e) => { if (e.target.id === 'profileModal') e.currentTarget.classList.remove('open'); };
+
+const spotToast = document.getElementById('spotToast');
+const hiddenSpotModal = document.getElementById('hiddenSpotModal');
+const hiddenSpotForm = document.getElementById('hiddenSpotForm');
+let pickingHiddenSpot = false;
+let pickedHiddenLatLng = null;
+let pickClickHandler = null;
+
+function setPickingHiddenSpot(active) {
+  pickingHiddenSpot = active;
+  document.body.classList.toggle('marking-spot', active);
+  spotToast.classList.toggle('show', active);
+  const addBtn = document.getElementById('addParkBtn');
+  addBtn.classList.toggle('btn-primary', active);
+  if (active) {
+    panel.classList.remove('open');
+    addBtn.innerHTML = `<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> Pick spot`;
+    pickClickHandler = (e) => openHiddenSpotForm(e.latlng);
+    map.once('click', pickClickHandler);
+  } else {
+    addBtn.innerHTML = `<svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Submit park`;
+    if (pickClickHandler) map.off('click', pickClickHandler);
+    pickClickHandler = null;
+  }
+}
+function openHiddenSpotForm(latlng) {
+  pickedHiddenLatLng = latlng;
+  setPickingHiddenSpot(false);
+  document.getElementById('spotCoordinate').textContent = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+  hiddenSpotForm.reset();
+  hiddenSpotModal.classList.add('open');
+  setTimeout(() => document.getElementById('spotName').focus(), 50);
+}
+function closeHiddenSpotForm() {
+  hiddenSpotModal.classList.remove('open');
+  pickedHiddenLatLng = null;
+}
+
+document.getElementById('addParkBtn').onclick = () => setPickingHiddenSpot(!pickingHiddenSpot);
+document.getElementById('cancelSpotPick').onclick = () => setPickingHiddenSpot(false);
+document.getElementById('closeHiddenSpot').onclick = closeHiddenSpotForm;
+document.getElementById('cancelHiddenSpot').onclick = closeHiddenSpotForm;
+hiddenSpotModal.onclick = (e) => { if (e.target.id === 'hiddenSpotModal') closeHiddenSpotForm(); };
+hiddenSpotForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!pickedHiddenLatLng) return;
+  const newSpot = makeHiddenSpot({
+    id: Date.now(),
+    name: document.getElementById('spotName').value.trim(),
+    area: document.getElementById('spotArea').value.trim(),
+    equipment: equipmentFromInput(document.getElementById('spotEquipment').value),
+    hiddenLevel: document.getElementById('hiddenLevel').value,
+    bestTime: document.getElementById('bestTime').value.trim(),
+    notes: document.getElementById('spotNotes').value.trim(),
+    lat: pickedHiddenLatLng.lat,
+    lng: pickedHiddenLatLng.lng
+  });
+  if (!newSpot.name || !newSpot.area || newSpot.equipment.length === 0) return;
+  const submissions = readSavedHiddenSpots();
+  submissions.push(newSpot);
+  try {
+    localStorage.setItem(HIDDEN_SPOTS_KEY, JSON.stringify(submissions));
+  } catch (err) {
+    console.warn('Could not save park submission', err);
+  }
+  closeHiddenSpotForm();
+  showMapNotice('Saved for review. It will not appear on the map until it is verified against a source.');
+});
+
+const searchBox = document.getElementById('searchBox');
+searchBox.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase().trim(); if (!q) return;
+  const match = parks.find(p => p.name.toLowerCase().includes(q) || p.area.toLowerCase().includes(q));
+  if (match) map.flyTo([match.lat, match.lng], 14);
+});
+searchBox.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const q = e.target.value.toLowerCase().trim();
+    const match = parks.find(p => p.name.toLowerCase().includes(q) || p.area.toLowerCase().includes(q));
+    if (match) openPark(match.id);
+  }
+});
+</script>
+</body>
+</html>

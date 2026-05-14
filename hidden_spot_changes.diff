@@ -1,0 +1,365 @@
+diff --git a/private/tmp/calisthenics_map.before.html b/calisthenics_map.html
+index 5478253..95ec29c 100644
+--- a/private/tmp/calisthenics_map.before.html
++++ b/calisthenics_map.html
+@@ -89,6 +89,11 @@ svg.icon-sm { width: 13px; height: 13px; }
+   filter: drop-shadow(0 4px 8px rgba(255,58,47,.4));
+ }
+ .bar-pin.verified { filter: drop-shadow(0 4px 8px rgba(69,224,156,.4)); }
++.bar-pin.hidden { filter: drop-shadow(0 4px 10px rgba(255,200,58,.38)); }
++body.marking-spot #map { cursor: crosshair; }
++.hidden-meta { padding: 12px 20px; border-bottom: 1px solid var(--border-soft); background: #0f1015; display: none; gap: 8px; flex-wrap: wrap; }
++.hidden-meta.show { display: flex; }
++.hidden-meta .chip { border-color: rgba(255,200,58,.28); color: var(--gold); background: rgba(255,200,58,.08); }
+ 
+ /* Layer toggle */
+ .layer-toggle {
+@@ -285,6 +290,34 @@ svg.icon-sm { width: 13px; height: 13px; }
+ .modal-section li:last-child { border-bottom: none; }
+ .modal-section li b { color: var(--text); font-family: var(--display); }
+ 
++
++/* Hidden spot flow */
++.spot-toast {
++  position: fixed; left: 50%; top: 76px; transform: translateX(-50%);
++  z-index: 1200; display: none; align-items: center; gap: 10px;
++  background: rgba(19,20,25,.96); border: 1px solid rgba(255,200,58,.45);
++  color: var(--text); padding: 11px 14px; border-radius: 12px;
++  box-shadow: 0 12px 34px rgba(0,0,0,.45); font-size: 12px; font-weight: 600;
++  letter-spacing: .02em; backdrop-filter: blur(12px);
++}
++.spot-toast.show { display: flex; }
++.spot-toast button { margin-left: 6px; }
++.spot-form { padding: 18px 20px 20px; display: grid; gap: 12px; }
++.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
++.form-field { display: flex; flex-direction: column; gap: 6px; }
++.form-field.full { grid-column: 1 / -1; }
++.form-field label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
++.form-field input, .form-field textarea, .form-field select {
++  width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
++  border-radius: 9px; padding: 10px 11px; font-family: var(--body); font-size: 13px;
++}
++.form-field textarea { min-height: 86px; resize: vertical; line-height: 1.45; }
++.form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: none; border-color: var(--accent); }
++.form-help { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: -2px; }
++.form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
++.map-coordinate { color: var(--gold); font-family: var(--display); font-size: 12px; }
++@media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } .spot-toast { width: calc(100vw - 28px); justify-content: space-between; } }
++
+ /* Loading + error */
+ #loadingMsg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); padding: 20px 28px; border-radius: 12px; z-index: 9999; border: 1px solid var(--border); font-family: var(--body); font-size: 13px; color: var(--text-dim); }
+ #loadingMsg .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; vertical-align: middle; }
+@@ -343,6 +376,12 @@ svg.icon-sm { width: 13px; height: 13px; }
+ 
+ <div id="map"></div>
+ 
++<div class="spot-toast" id="spotToast">
++  <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M2 12h20"/><circle cx="12" cy="12" r="4"/></svg>
++  <span>Click the exact hidden spot on the map.</span>
++  <button class="btn btn-ghost" id="cancelSpotPick" type="button">Cancel</button>
++</div>
++
+ <div class="count-pill"><span class="dot"></span><span class="num" id="visibleCount">0</span> parks tracked</div>
+ 
+ <div class="panel" id="sidePanel">
+@@ -372,6 +411,7 @@ svg.icon-sm { width: 13px; height: 13px; }
+     <div class="equipment-label">Equipment available</div>
+     <div class="equipment" id="equipment"></div>
+   </div>
++  <div class="hidden-meta" id="hiddenMeta"></div>
+   <div class="external-links" id="externalLinks"></div>
+   <div class="tabs">
+     <div class="tab active" data-tab="feed">Feed</div>
+@@ -418,6 +458,56 @@ svg.icon-sm { width: 13px; height: 13px; }
+   </div>
+ </div>
+ 
++<div class="modal-bg" id="hiddenSpotModal">
++  <div class="modal">
++    <button class="panel-close" id="closeHiddenSpot" style="top:12px;right:12px;" type="button">
++      <svg class="icon" viewBox="0 0 24 24" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
++    </button>
++    <div class="modal-head">
++      <h3>Mark a Hidden Spot</h3>
++      <div class="handle">Pin the bars. Help the next person know it is real.</div>
++    </div>
++    <form class="spot-form" id="hiddenSpotForm">
++      <div class="form-help">Location selected: <span class="map-coordinate" id="spotCoordinate">Pick a point on the map</span></div>
++      <div class="form-grid">
++        <div class="form-field full">
++          <label for="spotName">Spot name</label>
++          <input id="spotName" required maxlength="80" placeholder="e.g. Quiet pull-up bars behind the pitches" />
++        </div>
++        <div class="form-field">
++          <label for="spotArea">Area</label>
++          <input id="spotArea" required maxlength="80" placeholder="e.g. Rathmines, Dublin" />
++        </div>
++        <div class="form-field">
++          <label for="hiddenLevel">Hidden level</label>
++          <select id="hiddenLevel" required>
++            <option value="Easy to find">Easy to find</option>
++            <option value="Tucked away">Tucked away</option>
++            <option value="Local knowledge">Local knowledge</option>
++            <option value="Hard to spot">Hard to spot</option>
++          </select>
++        </div>
++        <div class="form-field full">
++          <label for="spotEquipment">Equipment</label>
++          <input id="spotEquipment" required maxlength="160" placeholder="Pull-up bars, dip bars, rings…" />
++        </div>
++        <div class="form-field full">
++          <label for="bestTime">Best time to train</label>
++          <input id="bestTime" maxlength="100" placeholder="e.g. Early morning; quiet after 7pm" />
++        </div>
++        <div class="form-field full">
++          <label for="spotNotes">Notes</label>
++          <textarea id="spotNotes" maxlength="500" placeholder="Condition, how to find it, lighting, ground surface, nearby parking…"></textarea>
++        </div>
++      </div>
++      <div class="form-actions">
++        <button class="btn btn-ghost" id="cancelHiddenSpot" type="button">Cancel</button>
++        <button class="btn btn-primary" type="submit">Save hidden spot</button>
++      </div>
++    </form>
++  </div>
++</div>
++
+ <div id="loadingMsg"><span class="spinner"></span>Loading map…</div>
+ <div id="errorMsg"></div>
+ 
+@@ -574,6 +664,56 @@ const parks = [
+   { id:174, name:"Millennium Park", area:"Naas, Co. Kildare", lat:53.2095, lng:-6.6717, source:"cm", verified:false, equipment:["Calisthenics rig"] },
+ ];
+ 
++
++/* Hidden spots saved by this browser */
++const HIDDEN_SPOTS_KEY = 'barmap.hiddenSpots.v1';
++function equipmentFromInput(value) {
++  return String(value || '')
++    .split(',')
++    .map(x => x.trim())
++    .filter(Boolean)
++    .slice(0, 12);
++}
++function readSavedHiddenSpots() {
++  try {
++    const saved = JSON.parse(localStorage.getItem(HIDDEN_SPOTS_KEY) || '[]');
++    return Array.isArray(saved) ? saved.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lng)) : [];
++  } catch (err) {
++    console.warn('Could not load hidden spots', err);
++    return [];
++  }
++}
++function writeSavedHiddenSpots() {
++  const hidden = parks
++    .filter(p => p.hiddenSpot)
++    .map(({ id, name, area, lat, lng, equipment, hiddenLevel, bestTime, notes, createdAt }) => ({
++      id, name, area, lat, lng, equipment, hiddenLevel, bestTime, notes, createdAt
++    }));
++  try {
++    localStorage.setItem(HIDDEN_SPOTS_KEY, JSON.stringify(hidden));
++  } catch (err) {
++    console.warn('Could not save hidden spots', err);
++  }
++}
++function makeHiddenSpot(raw) {
++  return {
++    id: raw.id || Date.now(),
++    name: raw.name,
++    area: raw.area,
++    lat: Number(raw.lat),
++    lng: Number(raw.lng),
++    source: 'hidden',
++    verified: false,
++    hiddenSpot: true,
++    hiddenLevel: raw.hiddenLevel || 'Tucked away',
++    bestTime: raw.bestTime || '',
++    notes: raw.notes || '',
++    createdAt: raw.createdAt || new Date().toISOString(),
++    equipment: Array.isArray(raw.equipment) ? raw.equipment : equipmentFromInput(raw.equipment)
++  };
++}
++readSavedHiddenSpots().forEach(saved => parks.push(makeHiddenSpot(saved)));
++
+ /* Generate sample social data per park */
+ const samplePosts = [
+   ["Hit a new PB today — 18 strict pull-ups.", ["Pull-ups"]],
+@@ -613,6 +753,15 @@ parks.forEach(p => {
+       text: post[0], tags: post[1]
+     });
+   }
++  if (p.hiddenSpot) {
++    p.members = 1;
++    p.rating = 'New';
++    p.feed = [{
++      user: 'JB', color: 3, time: 'just now',
++      text: p.notes ? `Hidden spot marked. ${p.notes}` : 'Hidden spot marked. Needs community photos and quality checks.',
++      tags: ['Hidden spot', p.hiddenLevel, p.bestTime].filter(Boolean)
++    }];
++  }
+   p.meetups = [];
+   const numMeet = Math.floor(seeded(p.id+20)*3.5);
+   const monthAbbrev = ["MAY","JUN"];
+@@ -682,10 +831,10 @@ document.getElementById('btnMap').onclick = () => {
+ };
+ 
+ /* Custom SVG marker — calisthenics rig in a pin */
+-function makeMarkerSVG(verified) {
+-  const gradId = verified ? 'gV' : 'gR';
+-  const c1 = verified ? '#45e09c' : '#ff3a2f';
+-  const c2 = verified ? '#6ce8b8' : '#ff7d68';
++function makeMarkerSVG(verified, hidden) {
++  const gradId = hidden ? 'gH' : (verified ? 'gV' : 'gR');
++  const c1 = hidden ? '#ffc83a' : (verified ? '#45e09c' : '#ff3a2f');
++  const c2 = hidden ? '#ffe17a' : (verified ? '#6ce8b8' : '#ff7d68');
+   return `
+     <svg width="30" height="38" viewBox="0 0 30 38" xmlns="http://www.w3.org/2000/svg">
+       <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+@@ -701,18 +850,25 @@ function makeMarkerSVG(verified) {
+ }
+ 
+ const markers = {};
+-parks.forEach(p => {
++function addParkMarker(p) {
++  if (markers[p.id]) return markers[p.id];
++  const pinClass = `bar-pin${p.verified ? ' verified' : ''}${p.hiddenSpot ? ' hidden' : ''}`;
+   const icon = L.divIcon({
+     className: 'bar-pin-wrap',
+-    html: `<div class="bar-pin${p.verified?' verified':''}">${makeMarkerSVG(p.verified)}</div>`,
++    html: `<div class="${pinClass}">${makeMarkerSVG(p.verified, p.hiddenSpot)}</div>`,
+     iconSize: [30, 38], iconAnchor: [15, 38]
+   });
+   const m = L.marker([p.lat, p.lng], { icon }).addTo(map)
+-    .bindTooltip(`<b>${p.name}</b><br><span style="color:#888">${p.area}</span>`, { direction: 'top', offset: [0, -32] })
++    .bindTooltip(`<b>${escapeHtml(p.name)}</b><br><span style="color:#888">${escapeHtml(p.area)}</span>`, { direction: 'top', offset: [0, -32] })
+     .on('click', () => openPark(p.id));
+   markers[p.id] = m;
+-});
+-document.getElementById('visibleCount').textContent = parks.length;
++  return m;
++}
++function updateParkCount() {
++  document.getElementById('visibleCount').textContent = parks.length;
++}
++parks.forEach(addParkMarker);
++updateParkCount();
+ 
+ /* ============================================================
+    SIDE PANEL
+@@ -740,7 +896,11 @@ function openPark(id) {
+     hero.style.backgroundImage = '';
+     credit.textContent = '';
+   }
+-  if (p.verified) {
++  if (p.hiddenSpot) {
++    badge.style.display = 'flex';
++    badge.innerHTML = `Hidden spot`;
++    badge.classList.add('community');
++  } else if (p.verified) {
+     badge.style.display = 'flex';
+     badge.innerHTML = `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> OSM Verified`;
+     badge.classList.remove('community'); badge.style.background = ''; badge.style.color = '';
+@@ -757,7 +917,19 @@ function openPark(id) {
+   document.getElementById('statMembers').textContent = p.members;
+   document.getElementById('statPosts').textContent = p.feed.length;
+   document.getElementById('statRating').innerHTML = p.rating + ' <span class="unit">★</span>';
+-  document.getElementById('equipment').innerHTML = p.equipment.map(e => `<span class="chip">${e}</span>`).join('');
++  document.getElementById('equipment').innerHTML = p.equipment.map(e => `<span class="chip">${escapeHtml(e)}</span>`).join('');
++
++  const hiddenMeta = document.getElementById('hiddenMeta');
++  if (p.hiddenSpot) {
++    hiddenMeta.classList.add('show');
++    hiddenMeta.innerHTML = `
++      <span class="chip">Hidden level: ${escapeHtml(p.hiddenLevel || 'Tucked away')}</span>
++      ${p.bestTime ? `<span class="chip">Best time: ${escapeHtml(p.bestTime)}</span>` : ''}
++    `;
++  } else {
++    hiddenMeta.classList.remove('show');
++    hiddenMeta.innerHTML = '';
++  }
+ 
+   const gmapsDir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+   const gmapsView = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
+@@ -900,9 +1072,79 @@ document.getElementById('profileBtn').onclick = () => document.getElementById('p
+ document.getElementById('closeProfile').onclick = () => document.getElementById('profileModal').classList.remove('open');
+ document.getElementById('profileModal').onclick = (e) => { if (e.target.id === 'profileModal') e.currentTarget.classList.remove('open'); };
+ 
+-document.getElementById('addParkBtn').onclick = () => {
+-  alert("Add a park\n\n1. Click on the map at the location\n2. Snap a photo of the equipment\n3. Tag the gear available\n\nComing in v2 with the real backend.");
+-};
++const spotToast = document.getElementById('spotToast');
++const hiddenSpotModal = document.getElementById('hiddenSpotModal');
++const hiddenSpotForm = document.getElementById('hiddenSpotForm');
++let pickingHiddenSpot = false;
++let pickedHiddenLatLng = null;
++let pickClickHandler = null;
++
++function setPickingHiddenSpot(active) {
++  pickingHiddenSpot = active;
++  document.body.classList.toggle('marking-spot', active);
++  spotToast.classList.toggle('show', active);
++  const addBtn = document.getElementById('addParkBtn');
++  addBtn.classList.toggle('btn-primary', active);
++  if (active) {
++    panel.classList.remove('open');
++    addBtn.innerHTML = `<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> Pick spot`;
++    pickClickHandler = (e) => openHiddenSpotForm(e.latlng);
++    map.once('click', pickClickHandler);
++  } else {
++    addBtn.innerHTML = `<svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add park`;
++    if (pickClickHandler) map.off('click', pickClickHandler);
++    pickClickHandler = null;
++  }
++}
++function openHiddenSpotForm(latlng) {
++  pickedHiddenLatLng = latlng;
++  setPickingHiddenSpot(false);
++  document.getElementById('spotCoordinate').textContent = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
++  hiddenSpotForm.reset();
++  hiddenSpotModal.classList.add('open');
++  setTimeout(() => document.getElementById('spotName').focus(), 50);
++}
++function closeHiddenSpotForm() {
++  hiddenSpotModal.classList.remove('open');
++  pickedHiddenLatLng = null;
++}
++
++document.getElementById('addParkBtn').onclick = () => setPickingHiddenSpot(!pickingHiddenSpot);
++document.getElementById('cancelSpotPick').onclick = () => setPickingHiddenSpot(false);
++document.getElementById('closeHiddenSpot').onclick = closeHiddenSpotForm;
++document.getElementById('cancelHiddenSpot').onclick = closeHiddenSpotForm;
++hiddenSpotModal.onclick = (e) => { if (e.target.id === 'hiddenSpotModal') closeHiddenSpotForm(); };
++hiddenSpotForm.addEventListener('submit', (e) => {
++  e.preventDefault();
++  if (!pickedHiddenLatLng) return;
++  const newSpot = makeHiddenSpot({
++    id: Date.now(),
++    name: document.getElementById('spotName').value.trim(),
++    area: document.getElementById('spotArea').value.trim(),
++    equipment: equipmentFromInput(document.getElementById('spotEquipment').value),
++    hiddenLevel: document.getElementById('hiddenLevel').value,
++    bestTime: document.getElementById('bestTime').value.trim(),
++    notes: document.getElementById('spotNotes').value.trim(),
++    lat: pickedHiddenLatLng.lat,
++    lng: pickedHiddenLatLng.lng
++  });
++  if (!newSpot.name || !newSpot.area || newSpot.equipment.length === 0) return;
++  newSpot.rating = 'New';
++  newSpot.members = 1;
++  newSpot.feed = [{
++    user: 'JB', color: 3, time: 'just now',
++    text: newSpot.notes ? `Hidden spot marked. ${newSpot.notes}` : 'Hidden spot marked. Needs community photos and quality checks.',
++    tags: ['Hidden spot', newSpot.hiddenLevel, newSpot.bestTime].filter(Boolean)
++  }];
++  newSpot.meetups = [];
++  newSpot.challenges = [{ name: 'First community check-in', unit: 'visits', board: [['JB', 1]] }];
++  parks.push(newSpot);
++  addParkMarker(newSpot);
++  updateParkCount();
++  writeSavedHiddenSpots();
++  closeHiddenSpotForm();
++  openPark(newSpot.id);
++});
+ 
+ const searchBox = document.getElementById('searchBox');
+ searchBox.addEventListener('input', (e) => {
