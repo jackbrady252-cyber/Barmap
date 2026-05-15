@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { CloseIcon } from '@/components/icons';
-import { equipmentFromInput, saveSubmittedSpot } from '@/lib/submissions';
+import { createSubmittedSpot, equipmentFromInput } from '@/lib/submissions';
 
 type SubmitSpotModalProps = {
   pickedLatLng: {
@@ -33,15 +33,14 @@ export default function SubmitSpotModal({ pickedLatLng, onClose, onSaved }: Subm
     setForm(current => ({ ...current, [field]: value }));
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!pickedLatLng) return;
 
     const equipment = equipmentFromInput(form.equipment);
     if (!form.name.trim() || !form.area.trim() || equipment.length === 0) return;
 
-    saveSubmittedSpot({
-      id: Date.now(),
+    await createSubmittedSpot({
       name: form.name.trim(),
       area: form.area.trim(),
       equipment,
@@ -49,8 +48,7 @@ export default function SubmitSpotModal({ pickedLatLng, onClose, onSaved }: Subm
       bestTime: form.bestTime.trim(),
       notes: form.notes.trim(),
       lat: pickedLatLng.lat,
-      lng: pickedLatLng.lng,
-      createdAt: new Date().toISOString()
+      lng: pickedLatLng.lng
     });
 
     onClose();

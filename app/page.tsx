@@ -1,8 +1,14 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import AppHeader from '@/components/AppHeader';
+import BottomNav, { type AppTab } from '@/components/BottomNav';
+import ChallengesPage from '@/components/ChallengesPage';
+import EventsPage from '@/components/EventsPage';
+import FeedPage from '@/components/FeedPage';
 import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
+import ProfilePage from '@/components/ProfilePage';
 import ProfileModal from '@/components/ProfileModal';
 import SubmitSpotModal from '@/components/SubmitSpotModal';
 import { verifiedParks } from '@/data/parks';
@@ -18,9 +24,11 @@ export default function Home() {
   const initialParks = useMemo(() => hydrateParks(verifiedParks), []);
   const [parks, setParks] = useState<Park[]>(initialParks);
   const [selectedParkId, setSelectedParkId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState('feed');
+  const [activeAppTab, setActiveAppTab] = useState<AppTab>('feed');
+  const [activeParkTab, setActiveParkTab] = useState('feed');
   const [profileOpen, setProfileOpen] = useState(false);
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
+  const [pickingSpot, setPickingSpot] = useState(false);
   const [notice, setNotice] = useState('');
   const noticeTimer = useRef<number | null>(null);
 
@@ -79,34 +87,70 @@ export default function Home() {
   }
 
   return (
-    <>
-      <Map
-        parks={parks}
-        selectedPark={selectedPark}
-        notice={notice}
-        onNotice={showNotice}
-        onOpenProfile={() => setProfileOpen(true)}
-        onParkSelect={park => {
-          setSelectedParkId(park.id);
-          setActiveTab('feed');
+    <div className="app-shell">
+      <AppHeader
+        pickingSpot={pickingSpot}
+        onSubmitPark={() => {
+          setActiveAppTab('map');
+          setSelectedParkId(null);
+          setPickingSpot(current => !current);
         }}
-        onSpotPicked={latLng => setPickedLatLng(latLng)}
+        onProfileOpen={() => setProfileOpen(true)}
       />
-      <ParkPanel
-        park={selectedPark}
-        activeTab={activeTab}
-        onClose={() => setSelectedParkId(null)}
-        onTabChange={setActiveTab}
-        onAddPost={addPost}
-        onSubmitScore={updateChallengeScore}
-        onToggleRsvp={toggleRsvp}
-      />
+
+      {activeAppTab === 'feed' && <FeedPage parks={parks} />}
+      {activeAppTab === 'challenges' && <ChallengesPage parks={parks} />}
+      {activeAppTab === 'events' && <EventsPage parks={parks} />}
+      {activeAppTab === 'profile' && <ProfilePage />}
+      {activeAppTab === 'map' && (
+        <>
+          <Map
+            parks={parks}
+            selectedPark={selectedPark}
+            notice={notice}
+            pickingSpot={pickingSpot}
+            onNotice={showNotice}
+            onPickingSpotChange={setPickingSpot}
+            onParkSelect={park => {
+              setSelectedParkId(park.id);
+              setActiveParkTab('feed');
+            }}
+            onSpotPicked={latLng => setPickedLatLng(latLng)}
+          />
+          <ParkPanel
+            park={selectedPark}
+            activeTab={activeParkTab}
+            onClose={() => setSelectedParkId(null)}
+            onTabChange={setActiveParkTab}
+            onAddPost={addPost}
+            onSubmitScore={updateChallengeScore}
+            onToggleRsvp={toggleRsvp}
+          />
+        </>
+      )}
+
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <SubmitSpotModal
         pickedLatLng={pickedLatLng}
-        onClose={() => setPickedLatLng(null)}
-        onSaved={() => showNotice('Saved for review. It will not appear on the map until it is verified against a source.')}
+        onClose={() => {
+          setPickedLatLng(null);
+          setPickingSpot(false);
+        }}
+        onSaved={() => {
+          setActiveAppTab('map');
+          showNotice('Saved for review. It will not appear on the map until it is verified against a source.');
+        }}
       />
-    </>
+      <BottomNav
+        activeTab={activeAppTab}
+        onTabChange={tab => {
+          setActiveAppTab(tab);
+          if (tab !== 'map') {
+            setSelectedParkId(null);
+            setPickingSpot(false);
+          }
+        }}
+      />
+    </div>
   );
 }

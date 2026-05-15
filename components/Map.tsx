@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type * as Leaflet from 'leaflet';
-import { LayersIcon, MapIcon, PinIcon, PlusIcon, SearchIcon } from '@/components/icons';
+import { LayersIcon, MapIcon, SearchIcon } from '@/components/icons';
 import type { Park } from '@/types/park';
 
 type PickedLatLng = {
@@ -16,8 +16,9 @@ type MapProps = {
   parks: Park[];
   selectedPark: Park | null;
   notice: string;
+  pickingSpot: boolean;
   onNotice: (message: string) => void;
-  onOpenProfile: () => void;
+  onPickingSpotChange: (picking: boolean) => void;
   onParkSelect: (park: Park) => void;
   onSpotPicked: (latLng: PickedLatLng) => void;
 };
@@ -49,8 +50,9 @@ export default function Map({
   parks,
   selectedPark,
   notice,
+  pickingSpot,
   onNotice,
-  onOpenProfile,
+  onPickingSpotChange,
   onParkSelect,
   onSpotPicked
 }: MapProps) {
@@ -63,7 +65,6 @@ export default function Map({
   const streetLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const [activeLayer, setActiveLayer] = useState<'satellite' | 'map'>('satellite');
   const [search, setSearch] = useState('');
-  const [pickingSpot, setPickingSpot] = useState(false);
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
@@ -184,14 +185,19 @@ export default function Map({
     if (!map || !pickingSpot) return;
 
     const handler = (event: Leaflet.LeafletMouseEvent) => {
-      setPickingSpot(false);
+      onPickingSpotChange(false);
       onSpotPicked({ lat: event.latlng.lat, lng: event.latlng.lng });
     };
     map.once('click', handler);
     return () => {
       map.off('click', handler);
     };
-  }, [pickingSpot, onSpotPicked]);
+  }, [pickingSpot, onPickingSpotChange, onSpotPicked]);
+
+  useEffect(() => {
+    document.body.classList.toggle('marking-spot', pickingSpot);
+    return () => document.body.classList.remove('marking-spot');
+  }, [pickingSpot]);
 
   function showSatelliteLayer() {
     const map = mapRef.current;
@@ -231,32 +237,6 @@ export default function Map({
 
   return (
     <>
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-mark">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="4" y1="6" x2="20" y2="6" />
-              <line x1="6" y1="6" x2="6" y2="18" />
-              <line x1="18" y1="6" x2="18" y2="18" />
-              <line x1="9" y1="11" x2="15" y2="11" />
-            </svg>
-          </div>
-          <div>
-            <span className="brand-text">BARMAP</span>
-            <span className="brand-sub">/ IRELAND</span>
-          </div>
-        </div>
-        <div className="nav-actions">
-          <button className={`btn${pickingSpot ? ' btn-primary' : ''}`} id="addParkBtn" onClick={() => setPickingSpot(current => !current)}>
-            {pickingSpot ? <PinIcon small /> : <PlusIcon small />}
-            {pickingSpot ? 'Pick spot' : 'Submit park'}
-          </button>
-          <button className="avatar" id="profileBtn" title="Profile" onClick={onOpenProfile}>
-            JB
-          </button>
-        </div>
-      </div>
-
       <div className="search-wrap">
         <SearchIcon />
         <input
@@ -294,7 +274,7 @@ export default function Map({
           <circle cx="12" cy="12" r="4" />
         </svg>
         <span>Click the exact park location to submit for verification.</span>
-        <button className="btn btn-ghost" id="cancelSpotPick" type="button" onClick={() => setPickingSpot(false)}>
+        <button className="btn btn-ghost" id="cancelSpotPick" type="button" onClick={() => onPickingSpotChange(false)}>
           Cancel
         </button>
       </div>

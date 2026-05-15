@@ -53,6 +53,8 @@ export type Park = ParkSeed & {
   challenges: Challenge[];
 };
 
+export type SubmittedSpotStatus = 'pending' | 'approved' | 'rejected';
+
 export type SubmittedSpot = {
   id: number;
   name: string;
@@ -64,4 +66,5 @@ export type SubmittedSpot = {
   bestTime: string;
   notes: string;
   createdAt: string;
+  status: SubmittedSpotStatus;
 };
