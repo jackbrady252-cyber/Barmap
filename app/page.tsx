@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import AuthModal from '@/components/AuthModal';
 import BottomNav, { type AppTab } from '@/components/BottomNav';
 import ChallengesPage from '@/components/ChallengesPage';
 import EventsPage from '@/components/EventsPage';
@@ -9,10 +11,12 @@ import FeedPage from '@/components/FeedPage';
 import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
 import ProfilePage from '@/components/ProfilePage';
-import ProfileModal from '@/components/ProfileModal';
 import SubmitSpotModal from '@/components/SubmitSpotModal';
 import { verifiedParks } from '@/data/parks';
+import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
 import { hydrateParks } from '@/lib/social';
+import { supabase } from '@/lib/supabase';
+import type { AuthMode, UserProfile } from '@/types/auth';
 import type { Park } from '@/types/park';
 
 type PickedLatLng = {
@@ -26,7 +30,11 @@ export default function Home() {
   const [selectedParkId, setSelectedParkId] = useState<number | null>(null);
   const [activeAppTab, setActiveAppTab] = useState<AppTab>('feed');
   const [activeParkTab, setActiveParkTab] = useState('feed');
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
   const [pickingSpot, setPickingSpot] = useState(false);
   const [notice, setNotice] = useState('');
@@ -39,6 +47,64 @@ export default function Home() {
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(''), 5200);
   }, []);
+
+  const loadUserProfile = useCallback(async (nextUser: User | null) => {
+    setUser(nextUser);
+
+    if (!nextUser) {
+      setProfile(null);
+      setAuthLoading(false);
+      return;
+    }
+
+    const nextProfile = (await fetchProfile(nextUser.id)) || (await ensureProfile(nextUser));
+    setProfile(nextProfile);
+    setAuthLoading(false);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadAuth() {
+      if (!supabase) {
+        setAuthLoading(false);
+        return;
+      }
+
+      const currentUser = await getCurrentUser();
+      if (mounted) await loadUserProfile(currentUser);
+    }
+
+    loadAuth();
+
+    if (!supabase) return undefined;
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      window.setTimeout(() => {
+        if (mounted) void loadUserProfile(session?.user || null);
+      }, 0);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [loadUserProfile]);
+
+  function openAuth(mode: AuthMode) {
+    setAuthMode(mode);
+    setAuthModalOpen(true);
+  }
+
+  async function handleSignOut() {
+    await signOutUser();
+    setUser(null);
+    setProfile(null);
+    showNotice('Logged out.');
+  }
 
   function addPost(parkId: number, text: string) {
     setParks(current =>
@@ -95,13 +161,21 @@ export default function Home() {
           setSelectedParkId(null);
           setPickingSpot(current => !current);
         }}
-        onProfileOpen={() => setProfileOpen(true)}
+        onProfileOpen={() => setActiveAppTab('profile')}
       />
 
       {activeAppTab === 'feed' && <FeedPage parks={parks} />}
       {activeAppTab === 'challenges' && <ChallengesPage parks={parks} />}
       {activeAppTab === 'events' && <EventsPage parks={parks} />}
-      {activeAppTab === 'profile' && <ProfilePage />}
+      {activeAppTab === 'profile' && (
+        <ProfilePage
+          user={user}
+          profile={profile}
+          loading={authLoading}
+          onAuthOpen={openAuth}
+          onSignOut={handleSignOut}
+        />
+      )}
       {activeAppTab === 'map' && (
         <>
           <Map
@@ -129,7 +203,6 @@ export default function Home() {
         </>
       )}
 
-      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <SubmitSpotModal
         pickedLatLng={pickedLatLng}
         onClose={() => {
@@ -149,6 +222,17 @@ export default function Home() {
             setSelectedParkId(null);
             setPickingSpot(false);
           }
+        }}
+      />
+      <AuthModal
+        mode={authMode}
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onModeChange={setAuthMode}
+        onAuthenticated={() => {
+          setAuthModalOpen(false);
+          setActiveAppTab('profile');
+          showNotice('Logged in.');
         }}
       />
     </div>
