@@ -3,9 +3,10 @@
 import PostCard from '@/components/PostCard';
 import { getSeededFeedPosts } from '@/data/socialFeed';
 import type { Park } from '@/types/park';
+import type { SocialPost } from '@/types/social';
 
-export default function FeedPage({ parks }: { parks: Park[] }) {
-  const posts = getSeededFeedPosts(parks);
+export default function FeedPage({ parks, posts }: { parks: Park[]; posts: SocialPost[] }) {
+  const feedPosts = [...posts, ...getSeededFeedPosts(parks)];
 
   return (
     <main className="app-main feed-screen">
@@ -14,7 +15,7 @@ export default function FeedPage({ parks }: { parks: Park[] }) {
           <span>Community Feed</span>
           <b>Ireland moving today</b>
         </div>
-        {posts.map(post => (
+        {feedPosts.map(post => (
           <PostCard post={post} key={post.id} />
         ))}
       </section>

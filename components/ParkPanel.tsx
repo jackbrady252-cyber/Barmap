@@ -211,7 +211,7 @@ export default function ParkPanel({
               />
             ))}
             {park.challenges.length === 0 && (
-              <EmptyState title="No challenges yet" body="This spot has no local challenge board yet." />
+              <EmptyState title="No missions yet" body="This spot has no local mission board yet." />
             )}
           </>
         )}
@@ -230,11 +230,17 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 }
 
 function Tabs({ activeTab, onTabChange }: { activeTab: string; onTabChange: (tab: string) => void }) {
+  const labels: Record<string, string> = {
+    feed: 'Feed',
+    meetups: 'Sessions',
+    challenges: 'Missions'
+  };
+
   return (
     <div className="tabs">
       {['feed', 'meetups', 'challenges'].map(tab => (
         <button className={`tab${activeTab === tab ? ' active' : ''}`} data-tab={tab} key={tab} onClick={() => onTabChange(tab)}>
-          {tab}
+          {labels[tab]}
         </button>
       ))}
     </div>

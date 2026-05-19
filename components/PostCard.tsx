@@ -15,7 +15,11 @@ export default function PostCard({ post }: PostCardProps) {
   const [saved, setSaved] = useState(post.saved);
 
   const likes = post.likes + (liked ? 1 : 0);
-  const backgroundImage = post.park.img ? `url("${post.park.img}")` : undefined;
+  const backgroundImage = post.mediaUrl
+    ? `url("${post.mediaUrl}")`
+    : post.park?.img
+      ? `url("${post.park.img}")`
+      : undefined;
 
   return (
     <article className="social-post">
@@ -36,7 +40,7 @@ export default function PostCard({ post }: PostCardProps) {
 
       <div className="social-post__body">
         <div className="post-context">
-          <LocationTag park={post.park} compact />
+          {post.park && <LocationTag park={post.park} compact />}
           {post.challenge && <span className="challenge-tag">{post.challenge}</span>}
           {post.distance && <span className="user-tag">{post.distance}</span>}
         </div>

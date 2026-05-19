@@ -7,8 +7,8 @@ export default function ChallengesPage({ parks }: { parks: Park[] }) {
 
   return (
     <main className="app-main app-page">
-      <div className="page-kicker">Challenges</div>
-      <h1>Underground leaderboards</h1>
+      <div className="page-kicker">Missions</div>
+      <h1>Underground missions</h1>
       <div className="compact-list">
         {challenges.map(({ park, challenge }) => (
           <article className="compact-card" key={`${park.id}-${challenge.name}`}>

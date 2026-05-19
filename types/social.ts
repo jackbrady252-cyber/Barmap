@@ -12,8 +12,9 @@ export type SocialUser = {
 export type SocialPost = {
   id: string;
   user: SocialUser;
-  park: Park;
+  park?: Park;
   mediaType: 'image' | 'video';
+  mediaUrl?: string;
   caption: string;
   challenge?: string;
   tags: string[];
@@ -23,4 +24,6 @@ export type SocialPost = {
   time: string;
   distance?: string;
   commentPreview?: string;
+  createdBy?: string;
+  createdAt?: string;
 };

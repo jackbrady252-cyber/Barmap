@@ -8,8 +8,8 @@ export type AppTab = 'feed' | 'map' | 'challenges' | 'events' | 'profile';
 const tabs: Array<{ id: AppTab; label: string; icon: ComponentType }> = [
   { id: 'feed', label: 'Feed', icon: FeedIcon },
   { id: 'map', label: 'Map', icon: MapTabIcon },
-  { id: 'challenges', label: 'Challenges', icon: ChallengeIcon },
-  { id: 'events', label: 'Events', icon: CalendarIcon },
+  { id: 'challenges', label: 'Missions', icon: ChallengeIcon },
+  { id: 'events', label: 'Sessions', icon: CalendarIcon },
   { id: 'profile', label: 'Profile', icon: ProfileIcon }
 ];
 

@@ -83,6 +83,116 @@ create trigger on_auth_user_created_profile
   after insert on auth.users
   for each row execute function public.handle_new_user_profile();
 
+create table if not exists public.posts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  caption text not null check (char_length(caption) <= 2200),
+  media_type text not null check (media_type in ('image', 'video')),
+  media_url text not null default '',
+  park_id integer,
+  location_name text,
+  location_area text,
+  mission_tag text,
+  likes_count integer not null default 0 check (likes_count >= 0),
+  comments_count integer not null default 0 check (comments_count >= 0),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists posts_created_at_idx
+  on public.posts (created_at desc);
+
+create index if not exists posts_user_created_at_idx
+  on public.posts (user_id, created_at desc);
+
+create index if not exists posts_park_created_at_idx
+  on public.posts (park_id, created_at desc)
+  where park_id is not null;
+
+alter table public.posts enable row level security;
+
+drop policy if exists "Anyone can read posts" on public.posts;
+create policy "Anyone can read posts"
+  on public.posts
+  for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "Users can create their own posts" on public.posts;
+create policy "Users can create their own posts"
+  on public.posts
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their own posts" on public.posts;
+create policy "Users can update their own posts"
+  on public.posts
+  for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own posts" on public.posts;
+create policy "Users can delete their own posts"
+  on public.posts
+  for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'post-media',
+  'post-media',
+  true,
+  10485760,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update
+set public = true,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Anyone can read post media" on storage.objects;
+create policy "Anyone can read post media"
+  on storage.objects
+  for select
+  to anon, authenticated
+  using (bucket_id = 'post-media');
+
+drop policy if exists "Users can upload their own post media" on storage.objects;
+create policy "Users can upload their own post media"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can update their own post media" on storage.objects;
+create policy "Users can update their own post media"
+  on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can delete their own post media" on storage.objects;
+create policy "Users can delete their own post media"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
 create table if not exists public.submitted_spots (
   id uuid primary key default gen_random_uuid(),
   name text not null,

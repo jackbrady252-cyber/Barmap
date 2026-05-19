@@ -7,7 +7,7 @@ export default function EventsPage({ parks }: { parks: Park[] }) {
 
   return (
     <main className="app-main app-page">
-      <div className="page-kicker">Events</div>
+      <div className="page-kicker">Sessions</div>
       <h1>Sessions near the bars</h1>
       <div className="compact-list">
         {events.map(({ park, meetup }, index) => (

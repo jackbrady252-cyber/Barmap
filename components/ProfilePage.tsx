@@ -1,12 +1,15 @@
 'use client';
 
 import type { User } from '@supabase/supabase-js';
+import PostCard from '@/components/PostCard';
 import type { AuthMode, UserProfile } from '@/types/auth';
+import type { SocialPost } from '@/types/social';
 
 type ProfilePageProps = {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  posts: SocialPost[];
   onAuthOpen: (mode: AuthMode) => void;
   onSignOut: () => void;
 };
@@ -24,7 +27,7 @@ function initialsFor(profile: UserProfile | null, user: User | null) {
   return user?.email?.slice(0, 2).toUpperCase() || 'BM';
 }
 
-export default function ProfilePage({ user, profile, loading, onAuthOpen, onSignOut }: ProfilePageProps) {
+export default function ProfilePage({ user, profile, loading, posts, onAuthOpen, onSignOut }: ProfilePageProps) {
   if (loading) {
     return (
       <main className="app-main app-page profile-page">
@@ -44,7 +47,7 @@ export default function ProfilePage({ user, profile, loading, onAuthOpen, onSign
           <div className="profile-empty-avatar">Sign in</div>
           <span className="page-kicker">Profile</span>
           <h1>You are logged out</h1>
-          <p>Create an account or log in to show your real BARMAP profile here. Your map, feed, challenges, and events stay available while logged out.</p>
+          <p>Create an account or log in to show your real BARMAP profile here. Your map, feed, missions, and sessions stay available while logged out.</p>
           <div className="profile-auth-actions">
             <button className="btn btn-primary" type="button" onClick={() => onAuthOpen('signup')}>
               Sign Up
@@ -70,6 +73,32 @@ export default function ProfilePage({ user, profile, loading, onAuthOpen, onSign
         <p>{username} - {homeCity}</p>
         {profile?.bio && <p className="profile-bio">{profile.bio}</p>}
       </div>
+      <section className="profile-dashboard" aria-label="Profile dashboard">
+        <div>
+          <b>{posts.length}</b>
+          <span>Posts</span>
+        </div>
+        <div>
+          <b>0</b>
+          <span>Saved spots</span>
+        </div>
+        <div>
+          <b>0</b>
+          <span>Missions</span>
+        </div>
+        <div>
+          <b>0</b>
+          <span>Followers</span>
+        </div>
+        <div>
+          <b>0</b>
+          <span>Following</span>
+        </div>
+        <div>
+          <b>0</b>
+          <span>Day streak</span>
+        </div>
+      </section>
       <section className="profile-section">
         <h3>Account</h3>
         <div className="compact-card"><span>Email</span><b>{user.email}</b></div>
@@ -78,6 +107,17 @@ export default function ProfilePage({ user, profile, loading, onAuthOpen, onSign
         <button className="btn btn-ghost profile-signout" type="button" onClick={onSignOut}>
           Log Out
         </button>
+      </section>
+      <section className="profile-section profile-posts">
+        <h3>Uploaded posts</h3>
+        {posts.length > 0 ? (
+          posts.map(post => <PostCard post={post} key={post.id} />)
+        ) : (
+          <div className="panel-empty-state">
+            <b>No posts yet</b>
+            <span>Your uploaded sessions will show here once you create your first post.</span>
+          </div>
+        )}
       </section>
     </main>
   );

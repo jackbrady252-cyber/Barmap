@@ -6,18 +6,22 @@ import AppHeader from '@/components/AppHeader';
 import AuthModal from '@/components/AuthModal';
 import BottomNav, { type AppTab } from '@/components/BottomNav';
 import ChallengesPage from '@/components/ChallengesPage';
+import CreatePostModal from '@/components/CreatePostModal';
 import EventsPage from '@/components/EventsPage';
 import FeedPage from '@/components/FeedPage';
+import { PlusIcon } from '@/components/icons';
 import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
 import ProfilePage from '@/components/ProfilePage';
 import SubmitSpotModal from '@/components/SubmitSpotModal';
 import { verifiedParks } from '@/data/parks';
 import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
+import { fetchPosts } from '@/lib/posts';
 import { hydrateParks } from '@/lib/social';
 import { supabase } from '@/lib/supabase';
 import type { AuthMode, UserProfile } from '@/types/auth';
 import type { Park } from '@/types/park';
+import type { SocialPost } from '@/types/social';
 
 type PickedLatLng = {
   lat: number;
@@ -31,10 +35,12 @@ export default function Home() {
   const [activeAppTab, setActiveAppTab] = useState<AppTab>('feed');
   const [activeParkTab, setActiveParkTab] = useState('feed');
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [createPostOpen, setCreatePostOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [posts, setPosts] = useState<SocialPost[]>([]);
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
   const [pickingSpot, setPickingSpot] = useState(false);
   const [notice, setNotice] = useState('');
@@ -69,6 +75,16 @@ export default function Home() {
     }
   }, [showNotice]);
 
+  const loadPosts = useCallback(async () => {
+    try {
+      const nextPosts = await fetchPosts(parks);
+      setPosts(nextPosts);
+    } catch (err) {
+      console.error('[BARMAP posts] Could not load posts', err);
+      showNotice(err instanceof Error ? err.message : 'Post loading failed.');
+    }
+  }, [parks, showNotice]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -100,6 +116,10 @@ export default function Home() {
       subscription.unsubscribe();
     };
   }, [loadUserProfile]);
+
+  useEffect(() => {
+    void loadPosts();
+  }, [loadPosts]);
 
   function openAuth(mode: AuthMode) {
     setAuthMode(mode);
@@ -177,7 +197,7 @@ export default function Home() {
         onProfileOpen={() => setActiveAppTab('profile')}
       />
 
-      {activeAppTab === 'feed' && <FeedPage parks={parks} />}
+      {activeAppTab === 'feed' && <FeedPage parks={parks} posts={posts} />}
       {activeAppTab === 'challenges' && <ChallengesPage parks={parks} />}
       {activeAppTab === 'events' && <EventsPage parks={parks} />}
       {activeAppTab === 'profile' && (
@@ -185,6 +205,7 @@ export default function Home() {
           user={user}
           profile={profile}
           loading={authLoading}
+          posts={posts.filter(post => post.createdBy === user?.id)}
           onAuthOpen={openAuth}
           onSignOut={handleSignOut}
         />
@@ -227,6 +248,21 @@ export default function Home() {
           showNotice('Saved for review. It will not appear on the map until it is verified against a source.');
         }}
       />
+      <button
+        className="floating-create"
+        type="button"
+        onClick={() => {
+          if (!user) {
+            openAuth('login');
+            showNotice('Log in to create a post.');
+            return;
+          }
+          setCreatePostOpen(true);
+        }}
+      >
+        <PlusIcon />
+        <span>Create</span>
+      </button>
       <BottomNav
         activeTab={activeAppTab}
         onTabChange={tab => {
@@ -246,6 +282,22 @@ export default function Home() {
           setAuthModalOpen(false);
           setActiveAppTab('profile');
           showNotice('Logged in.');
+        }}
+      />
+      <CreatePostModal
+        open={createPostOpen}
+        user={user}
+        profile={profile}
+        parks={parks}
+        onClose={() => setCreatePostOpen(false)}
+        onAuthRequired={() => {
+          setCreatePostOpen(false);
+          openAuth('login');
+        }}
+        onCreated={() => {
+          void loadPosts();
+          setActiveAppTab('feed');
+          showNotice('Post created.');
         }}
       />
     </div>
