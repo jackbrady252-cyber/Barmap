@@ -156,6 +156,8 @@ export default function Home() {
     <div className="app-shell">
       <AppHeader
         pickingSpot={pickingSpot}
+        profile={profile}
+        loggedIn={Boolean(user)}
         onSubmitPark={() => {
           setActiveAppTab('map');
           setSelectedParkId(null);

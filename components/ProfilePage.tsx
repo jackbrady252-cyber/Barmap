@@ -41,9 +41,10 @@ export default function ProfilePage({ user, profile, loading, onAuthOpen, onSign
     return (
       <main className="app-main app-page profile-page">
         <div className="profile-auth-card">
+          <div className="profile-empty-avatar">Sign in</div>
           <span className="page-kicker">Profile</span>
-          <h1>Join the movement map</h1>
-          <p>Log in or sign up to claim your profile, save spots, and start building your training history.</p>
+          <h1>You are logged out</h1>
+          <p>Create an account or log in to show your real BARMAP profile here. Your map, feed, challenges, and events stay available while logged out.</p>
           <div className="profile-auth-actions">
             <button className="btn btn-primary" type="button" onClick={() => onAuthOpen('signup')}>
               Sign Up
@@ -68,11 +69,6 @@ export default function ProfilePage({ user, profile, loading, onAuthOpen, onSign
         <h1>{displayName}</h1>
         <p>{username} - {homeCity}</p>
         {profile?.bio && <p className="profile-bio">{profile.bio}</p>}
-      </div>
-      <div className="profile-grid">
-        <div><b>0</b><span>Parks</span></div>
-        <div><b>0</b><span>Posts</span></div>
-        <div><b>0</b><span>Wins</span></div>
       </div>
       <section className="profile-section">
         <h3>Account</h3>

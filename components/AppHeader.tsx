@@ -1,14 +1,29 @@
 'use client';
 
-import { PinIcon, PlusIcon } from '@/components/icons';
+import { PinIcon, PlusIcon, UserIcon } from '@/components/icons';
+import type { UserProfile } from '@/types/auth';
 
 type AppHeaderProps = {
   pickingSpot: boolean;
+  profile: UserProfile | null;
+  loggedIn: boolean;
   onSubmitPark: () => void;
   onProfileOpen: () => void;
 };
 
-export default function AppHeader({ pickingSpot, onSubmitPark, onProfileOpen }: AppHeaderProps) {
+function initialsFor(profile: UserProfile | null) {
+  if (!profile?.displayName) return '';
+  return profile.displayName
+    .split(' ')
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+export default function AppHeader({ pickingSpot, profile, loggedIn, onSubmitPark, onProfileOpen }: AppHeaderProps) {
+  const initials = initialsFor(profile);
+
   return (
     <div className="topbar">
       <div className="brand">
@@ -30,8 +45,15 @@ export default function AppHeader({ pickingSpot, onSubmitPark, onProfileOpen }: 
           {pickingSpot ? <PinIcon small /> : <PlusIcon small />}
           {pickingSpot ? 'Pick spot' : 'Submit park'}
         </button>
-        <button className="avatar" id="profileBtn" title="Profile" onClick={onProfileOpen}>
-          JB
+        <button
+          className={`avatar header-profile${loggedIn ? '' : ' logged-out'}`}
+          id="profileBtn"
+          title={loggedIn ? 'Profile' : 'Sign in'}
+          aria-label={loggedIn ? 'Open profile' : 'Sign in'}
+          onClick={onProfileOpen}
+        >
+          {loggedIn && initials ? initials : <UserIcon small />}
+          {!loggedIn && <span>Sign in</span>}
         </button>
       </div>
     </div>

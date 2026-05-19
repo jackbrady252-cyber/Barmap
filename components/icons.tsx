@@ -137,3 +137,12 @@ export function PlayIcon() {
     </svg>
   );
 }
+
+export function UserIcon({ small }: IconProps) {
+  return (
+    <svg className={`icon${small ? ' icon-sm' : ''}`} viewBox="0 0 24 24">
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="8" r="4" />
+    </svg>
+  );
+}

@@ -58,11 +58,6 @@ export default function ParkPanel({
             <span id="parkLoc">Location</span>
           </div>
         </div>
-        <div className="panel-stats">
-          <div className="stat"><div className="v">0</div><div className="l">Members</div></div>
-          <div className="stat"><div className="v">0</div><div className="l">Posts</div></div>
-          <div className="stat"><div className="v">0.0</div><div className="l">Rating</div></div>
-        </div>
         <div className="equipment-wrap">
           <div className="equipment-label">Equipment available</div>
           <div className="equipment" />
@@ -139,12 +134,6 @@ export default function ParkPanel({
         </div>
       </div>
 
-      <div className="panel-stats">
-        <div className="stat"><div className="v" id="statMembers">{park.members}</div><div className="l">Members</div></div>
-        <div className="stat"><div className="v" id="statPosts">{park.feed.length}</div><div className="l">Posts</div></div>
-        <div className="stat"><div className="v" id="statRating">{park.rating} <span className="unit">★</span></div><div className="l">Rating</div></div>
-      </div>
-
       <div className="equipment-wrap">
         <div className="equipment-label">Equipment available</div>
         <div className="equipment" id="equipment">
@@ -191,6 +180,9 @@ export default function ParkPanel({
               <button className="btn-primary btn" id="postBtn" onClick={submitPost}>Post</button>
             </div>
             {park.feed.map((post, index) => <Post post={post} key={`${post.user}-${post.time}-${index}`} />)}
+            {park.feed.length === 0 && (
+              <EmptyState title="No park posts yet" body="Share the first training note for this spot." />
+            )}
           </>
         )}
 
@@ -218,9 +210,21 @@ export default function ParkPanel({
                 }}
               />
             ))}
+            {park.challenges.length === 0 && (
+              <EmptyState title="No challenges yet" body="This spot has no local challenge board yet." />
+            )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="panel-empty-state">
+      <b>{title}</b>
+      <span>{body}</span>
     </div>
   );
 }
@@ -272,19 +276,18 @@ function Meetups({
 }) {
   if (park.meetups.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>
-        No meetups yet.
-        <br />
-        <br />
-        <button className="btn-primary btn" onClick={() => window.alert('Coming soon!')}>+ Host a meetup</button>
+      <div className="panel-empty-state">
+        <b>No meetups yet</b>
+        <span>Community sessions for this park will appear here.</span>
+        <button className="btn-primary btn" onClick={() => window.alert('Coming soon!')}>Host a meetup</button>
       </div>
     );
   }
 
   return (
     <>
-      <button className="btn-primary btn" style={{ marginBottom: 14, width: '100%', justifyContent: 'center' }} onClick={() => window.alert('Coming soon!')}>
-        + Host a meetup
+      <button className="btn-primary btn panel-action-full" onClick={() => window.alert('Coming soon!')}>
+        Host a meetup
       </button>
       {park.meetups.map((meetup, index) => (
         <MeetupCard

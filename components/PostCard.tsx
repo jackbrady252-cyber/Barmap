@@ -19,44 +19,37 @@ export default function PostCard({ post }: PostCardProps) {
 
   return (
     <article className="social-post">
+      <header className="social-post__header">
+        <UserAvatar user={post.user} />
+        <div>
+          <b>{post.user.name}</b>
+          <span>{post.user.handle} · {post.time}</span>
+        </div>
+      </header>
+
       <div className={`social-post__media social-post__media--${post.mediaType}`} style={{ backgroundImage }}>
-        <div className="social-post__shade" />
         <div className="media-type">
           {post.mediaType === 'video' && <PlayIcon />}
           <span>{post.mediaType}</span>
         </div>
+      </div>
 
-        <div className="post-overlay">
-          <header className="post-user">
-            <UserAvatar user={post.user} />
-            <div>
-              <b>{post.user.name}</b>
-              <span>{post.user.handle} · {post.time}</span>
-            </div>
-          </header>
-
-          <p>{post.caption}</p>
-
-          <div className="post-context">
-            <LocationTag park={post.park} compact />
-            {post.challenge && <span className="challenge-tag">{post.challenge}</span>}
-            {post.distance && <span className="user-tag">{post.distance}</span>}
-          </div>
-
-          <div className="tag-row">
-            {post.tags.map(tag => (
-              <span className="user-tag" key={tag}>#{tag}</span>
-            ))}
-          </div>
-
-          <div className="post-community">
-            <span>{likes} likes</span>
-            <span>{post.comments} comments</span>
-            {post.commentPreview && <b>{post.commentPreview}</b>}
-          </div>
+      <div className="social-post__body">
+        <div className="post-context">
+          <LocationTag park={post.park} compact />
+          {post.challenge && <span className="challenge-tag">{post.challenge}</span>}
+          {post.distance && <span className="user-tag">{post.distance}</span>}
         </div>
 
-        <div className="post-actions-vertical">
+        <p>{post.caption}</p>
+
+        <div className="tag-row">
+          {post.tags.map(tag => (
+            <span className="user-tag" key={tag}>#{tag}</span>
+          ))}
+        </div>
+
+        <div className="post-actions-row">
           <button
             className={liked ? 'active' : ''}
             type="button"
@@ -83,6 +76,12 @@ export default function PostCard({ post }: PostCardProps) {
             <ShareIcon />
             <span>Share</span>
           </button>
+        </div>
+
+        <div className="post-community">
+          <span>{likes} likes</span>
+          <span>{post.comments} comments</span>
+          {post.commentPreview && <b>{post.commentPreview}</b>}
         </div>
       </div>
     </article>
