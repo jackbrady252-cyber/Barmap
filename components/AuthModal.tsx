@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { CloseIcon } from '@/components/icons';
 import { loginWithEmail, signUpWithEmail } from '@/lib/auth';
-import { supabaseConfigured } from '@/lib/supabase';
+import { supabaseConfigured, supabaseConfigStatus } from '@/lib/supabase';
 import type { AuthMode, UserProfile } from '@/types/auth';
 
 type AuthModalProps = {
@@ -23,6 +23,12 @@ export default function AuthModal({ mode, open, onClose, onModeChange, onAuthent
   const [homeCity, setHomeCity] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const configMessage = supabaseConfigured
+    ? ''
+    : [
+        ...supabaseConfigStatus.missing.map(name => `${name} is missing or empty`),
+        ...supabaseConfigStatus.invalid
+      ].join('. ');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,13 +51,15 @@ export default function AuthModal({ mode, open, onClose, onModeChange, onAuthent
       const session = result.session;
 
       if (mode === 'signup' && user && !session) {
-        setMessage('Account created. Check your email to confirm your login.');
+        setMessage('Signup worked. Supabase sent a verification email. Open it, verify your email, then return here and log in.');
       } else {
         onAuthenticated(null);
         onClose();
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Authentication failed.');
+      const nextMessage = err instanceof Error ? err.message : 'Authentication failed.';
+      console.error('[BARMAP auth] Auth modal submit failed', err);
+      setMessage(nextMessage);
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +75,7 @@ export default function AuthModal({ mode, open, onClose, onModeChange, onAuthent
           <div className="avatar-lg">{mode === 'signup' ? 'UP' : 'IN'}</div>
           <h3>{mode === 'signup' ? 'Create BARMAP account' : 'Log in to BARMAP'}</h3>
           <div className="handle">
-            {supabaseConfigured ? 'Email and password' : 'Supabase env vars are not configured yet'}
+            {supabaseConfigured ? 'Email and password' : 'Supabase config needs attention'}
           </div>
         </div>
 
@@ -134,6 +142,7 @@ export default function AuthModal({ mode, open, onClose, onModeChange, onAuthent
             />
           </div>
 
+          {!supabaseConfigured && <p className="auth-message">Auth is disabled: {configMessage}</p>}
           {message && <p className="auth-message">{message}</p>}
 
           <div className="auth-actions">

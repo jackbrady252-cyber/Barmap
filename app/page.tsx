@@ -57,10 +57,17 @@ export default function Home() {
       return;
     }
 
-    const nextProfile = (await fetchProfile(nextUser.id)) || (await ensureProfile(nextUser));
-    setProfile(nextProfile);
-    setAuthLoading(false);
-  }, []);
+    try {
+      const nextProfile = (await fetchProfile(nextUser.id)) || (await ensureProfile(nextUser));
+      setProfile(nextProfile);
+    } catch (err) {
+      console.error('[BARMAP auth] Could not load profile after auth state change', err);
+      setProfile(null);
+      showNotice(err instanceof Error ? err.message : 'Profile loading failed.');
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [showNotice]);
 
   useEffect(() => {
     let mounted = true;
@@ -100,10 +107,14 @@ export default function Home() {
   }
 
   async function handleSignOut() {
-    await signOutUser();
-    setUser(null);
-    setProfile(null);
-    showNotice('Logged out.');
+    try {
+      await signOutUser();
+      setUser(null);
+      setProfile(null);
+      showNotice('Logged out.');
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : 'Logout failed.');
+    }
   }
 
   function addPost(parkId: number, text: string) {

@@ -1,5 +1,5 @@
 import type { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseConfigStatus } from '@/lib/supabase';
 import type { UserProfile } from '@/types/auth';
 
 type ProfileRow = {
@@ -41,18 +41,45 @@ function usernameFromEmail(email?: string) {
 }
 
 function normalizeUsername(value: string) {
-  return (value || 'athlete')
+  const normalized = (value || 'athlete')
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 24);
+
+  return normalized.length >= 3 ? normalized : `user_${normalized || 'new'}`;
+}
+
+function getAuthRedirectUrl() {
+  if (typeof window === 'undefined') return undefined;
+  return window.location.origin;
+}
+
+function getConfigurationError() {
+  if (supabaseConfigStatus.configured) return null;
+
+  const details = [
+    ...supabaseConfigStatus.missing.map(name => `${name} is missing or empty`),
+    ...supabaseConfigStatus.invalid
+  ];
+
+  return `Supabase is not configured correctly: ${details.join('; ')}.`;
+}
+
+function authStageError(stage: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[BARMAP auth] ${stage}`, error);
+  return new Error(`${stage}: ${message}`);
 }
 
 export async function getCurrentUser() {
   if (!supabase) return null;
 
   const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
+  if (error) {
+    console.warn('[BARMAP auth] get current user failed', error);
+    return null;
+  }
   return data.user;
 }
 
@@ -66,8 +93,7 @@ export async function fetchProfile(userId: string): Promise<UserProfile | null> 
     .maybeSingle<ProfileRow>();
 
   if (error) {
-    console.warn('Could not fetch profile', error);
-    return null;
+    throw authStageError('Profile fetch failed', error);
   }
 
   return data ? rowToProfile(data) : null;
@@ -98,45 +124,55 @@ export async function ensureProfile(user: User, input?: Partial<SignUpInput>): P
     .single<ProfileRow>();
 
   if (error) {
-    console.warn('Could not create profile', error);
-    return fetchProfile(user.id);
+    throw authStageError('Profile creation failed', error);
   }
 
   return rowToProfile(data);
 }
 
 export async function signUpWithEmail(input: SignUpInput) {
-  if (!supabase) throw new Error('Supabase is not configured yet.');
+  const configError = getConfigurationError();
+  if (!supabase || configError) throw new Error(configError || 'Supabase is not configured.');
+
+  const username = normalizeUsername(input.username);
 
   const { data, error } = await supabase.auth.signUp({
-    email: input.email,
+    email: input.email.trim(),
     password: input.password,
     options: {
+      emailRedirectTo: getAuthRedirectUrl(),
       data: {
-        username: input.username,
-        display_name: input.displayName,
-        home_city: input.homeCity
+        username,
+        display_name: input.displayName.trim() || username,
+        home_city: input.homeCity.trim()
       }
     }
   });
 
-  if (error) throw error;
-  if (data.user && data.session) await ensureProfile(data.user, input);
+  if (error) throw authStageError('Sign up failed', error);
+  if (!data.user) throw new Error('Sign up failed: Supabase did not return a user.');
+
+  if (data.session) {
+    await ensureProfile(data.user, { ...input, username });
+  }
 
   return data;
 }
 
 export async function loginWithEmail(email: string, password: string) {
-  if (!supabase) throw new Error('Supabase is not configured yet.');
+  const configError = getConfigurationError();
+  if (!supabase || configError) throw new Error(configError || 'Supabase is not configured.');
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  if (data.user) await ensureProfile(data.user);
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  if (error) throw authStageError('Login failed', error);
+  if (!data.session || !data.user) throw new Error('Login failed: Supabase did not return a session.');
+  await ensureProfile(data.user);
 
   return data;
 }
 
 export async function signOut() {
   if (!supabase) return;
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) throw authStageError('Logout failed', error);
 }
