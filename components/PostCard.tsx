@@ -8,11 +8,14 @@ import type { SocialPost } from '@/types/social';
 
 type PostCardProps = {
   post: SocialPost;
+  saved?: boolean;
+  onToggleSave?: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
 };
 
-export default function PostCard({ post }: PostCardProps) {
+export default function PostCard({ post, saved: savedProp, onToggleSave }: PostCardProps) {
   const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(post.saved);
+  const [saved, setSaved] = useState(savedProp ?? post.saved);
+  const [saving, setSaving] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [localComments, setLocalComments] = useState<string[]>([]);
@@ -20,7 +23,6 @@ export default function PostCard({ post }: PostCardProps) {
 
   const likes = post.likes + (liked ? 1 : 0);
   const comments = post.comments + localComments.length;
-  const storageKey = useMemo(() => `barmap:post:${post.id}:saved`, [post.id]);
   const commentsKey = useMemo(() => `barmap:post:${post.id}:comments`, [post.id]);
   const backgroundImage = post.mediaUrl
     ? `url("${post.mediaUrl}")`
@@ -30,23 +32,36 @@ export default function PostCard({ post }: PostCardProps) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedSaved = window.localStorage.getItem(storageKey);
-    if (storedSaved) setSaved(storedSaved === 'true');
-
     try {
       const storedComments = JSON.parse(window.localStorage.getItem(commentsKey) || '[]');
       if (Array.isArray(storedComments)) setLocalComments(storedComments.filter(item => typeof item === 'string'));
     } catch {
       setLocalComments([]);
     }
-  }, [commentsKey, storageKey]);
+  }, [commentsKey]);
 
-  function toggleSaved() {
-    setSaved(current => {
-      const next = !current;
-      if (typeof window !== 'undefined') window.localStorage.setItem(storageKey, String(next));
-      return next;
-    });
+  useEffect(() => {
+    setSaved(savedProp ?? post.saved);
+  }, [post.saved, savedProp]);
+
+  async function toggleSaved() {
+    if (saving) return;
+
+    const next = !saved;
+    setSaved(next);
+    setSaving(true);
+    setFeedback(next ? 'Saving...' : 'Removing...');
+
+    try {
+      await onToggleSave?.(post, next);
+      setFeedback(next ? 'Saved.' : 'Removed.');
+    } catch (err) {
+      setSaved(!next);
+      setFeedback(err instanceof Error ? err.message : 'Save failed.');
+    } finally {
+      setSaving(false);
+      window.setTimeout(() => setFeedback(''), 2200);
+    }
   }
 
   function submitComment() {
@@ -136,9 +151,10 @@ export default function PostCard({ post }: PostCardProps) {
             type="button"
             aria-label={saved ? 'Remove saved post' : 'Save post'}
             onClick={toggleSaved}
+            disabled={saving}
           >
             <BookmarkIcon />
-            <span>Save</span>
+            <span>{saved ? 'Saved' : 'Save'}</span>
           </button>
           <button type="button" aria-label="Share post" onClick={sharePost}>
             <ShareIcon />

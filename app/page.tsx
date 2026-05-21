@@ -16,8 +16,10 @@ import ParkPanel from '@/components/ParkPanel';
 import ProfilePage from '@/components/ProfilePage';
 import SubmitSpotModal from '@/components/SubmitSpotModal';
 import { verifiedParks } from '@/data/parks';
+import { getSeededFeedPosts } from '@/data/socialFeed';
 import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
 import { fetchPosts } from '@/lib/posts';
+import { fetchSavedPostIds, savePostForUser, unsavePostForUser } from '@/lib/savedPosts';
 import { hydrateParks } from '@/lib/social';
 import { supabase } from '@/lib/supabase';
 import type { AuthMode, UserProfile } from '@/types/auth';
@@ -43,12 +45,15 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
   const [pickingSpot, setPickingSpot] = useState(false);
   const [notice, setNotice] = useState('');
   const noticeTimer = useRef<number | null>(null);
 
   const selectedPark = parks.find(park => park.id === selectedParkId) || null;
+  const feedPosts = useMemo(() => [...posts, ...getSeededFeedPosts(parks)], [parks, posts]);
+  const savedPosts = useMemo(() => feedPosts.filter(post => savedPostIds.has(post.id)), [feedPosts, savedPostIds]);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -61,6 +66,7 @@ export default function Home() {
 
     if (!nextUser) {
       setProfile(null);
+      setSavedPostIds(new Set());
       setAuthLoading(false);
       return;
     }
@@ -86,6 +92,21 @@ export default function Home() {
       showNotice(err instanceof Error ? err.message : 'Post loading failed.');
     }
   }, [parks, showNotice]);
+
+  const loadSavedPosts = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setSavedPostIds(new Set());
+      return;
+    }
+
+    try {
+      const ids = await fetchSavedPostIds(nextUser.id);
+      setSavedPostIds(new Set(ids));
+    } catch (err) {
+      console.error('[BARMAP saved posts] Could not load saved posts', err);
+      showNotice(err instanceof Error ? err.message : 'Saved posts loading failed.');
+    }
+  }, [showNotice]);
 
   useEffect(() => {
     let mounted = true;
@@ -123,6 +144,10 @@ export default function Home() {
     void loadPosts();
   }, [loadPosts]);
 
+  useEffect(() => {
+    void loadSavedPosts(user);
+  }, [loadSavedPosts, user]);
+
   function openAuth(mode: AuthMode) {
     setAuthMode(mode);
     setAuthModalOpen(true);
@@ -133,9 +158,39 @@ export default function Home() {
       await signOutUser();
       setUser(null);
       setProfile(null);
+      setSavedPostIds(new Set());
       showNotice('Logged out.');
     } catch (err) {
       showNotice(err instanceof Error ? err.message : 'Logout failed.');
+    }
+  }
+
+  async function handleToggleSave(post: SocialPost, nextSaved: boolean) {
+    if (!user) {
+      openAuth('login');
+      showNotice('Log in to save posts.');
+      throw new Error('Log in to save posts.');
+    }
+
+    setSavedPostIds(current => {
+      const next = new Set(current);
+      if (nextSaved) next.add(post.id);
+      else next.delete(post.id);
+      return next;
+    });
+
+    try {
+      if (nextSaved) await savePostForUser(user.id, post.id);
+      else await unsavePostForUser(user.id, post.id);
+    } catch (err) {
+      setSavedPostIds(current => {
+        const next = new Set(current);
+        if (nextSaved) next.delete(post.id);
+        else next.add(post.id);
+        return next;
+      });
+      showNotice(err instanceof Error ? err.message : 'Save failed.');
+      throw err;
     }
   }
 
@@ -199,7 +254,14 @@ export default function Home() {
         onProfileOpen={() => setActiveAppTab('profile')}
       />
 
-      {activeAppTab === 'feed' && <FeedPage parks={parks} posts={posts} />}
+      {activeAppTab === 'feed' && (
+        <FeedPage
+          parks={parks}
+          posts={posts}
+          savedPostIds={savedPostIds}
+          onToggleSave={handleToggleSave}
+        />
+      )}
       {activeAppTab === 'challenges' && <ChallengesPage parks={parks} />}
       {activeAppTab === 'events' && <EventsPage parks={parks} />}
       {activeAppTab === 'profile' && (
@@ -208,8 +270,11 @@ export default function Home() {
           profile={profile}
           loading={authLoading}
           posts={posts.filter(post => post.createdBy === user?.id)}
+          savedPosts={savedPosts}
+          savedPostIds={savedPostIds}
           onCreatePost={() => setCreatePostOpen(true)}
           onEditProfile={() => setEditProfileOpen(true)}
+          onToggleSave={handleToggleSave}
           onAuthOpen={openAuth}
           onSignOut={handleSignOut}
         />

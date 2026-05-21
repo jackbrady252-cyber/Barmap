@@ -5,7 +5,14 @@ import { getSeededFeedPosts } from '@/data/socialFeed';
 import type { Park } from '@/types/park';
 import type { SocialPost } from '@/types/social';
 
-export default function FeedPage({ parks, posts }: { parks: Park[]; posts: SocialPost[] }) {
+type FeedPageProps = {
+  parks: Park[];
+  posts: SocialPost[];
+  savedPostIds: Set<string>;
+  onToggleSave: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
+};
+
+export default function FeedPage({ parks, posts, savedPostIds, onToggleSave }: FeedPageProps) {
   const feedPosts = [...posts, ...getSeededFeedPosts(parks)];
 
   return (
@@ -16,7 +23,7 @@ export default function FeedPage({ parks, posts }: { parks: Park[]; posts: Socia
           <b>Ireland moving today</b>
         </div>
         {feedPosts.map(post => (
-          <PostCard post={post} key={post.id} />
+          <PostCard post={post} saved={savedPostIds.has(post.id)} onToggleSave={onToggleSave} key={post.id} />
         ))}
       </section>
     </main>

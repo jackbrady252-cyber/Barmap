@@ -11,8 +11,11 @@ type ProfilePageProps = {
   profile: UserProfile | null;
   loading: boolean;
   posts: SocialPost[];
+  savedPosts: SocialPost[];
+  savedPostIds: Set<string>;
   onCreatePost: () => void;
   onEditProfile: () => void;
+  onToggleSave: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
   onAuthOpen: (mode: AuthMode) => void;
   onSignOut: () => void;
 };
@@ -30,7 +33,19 @@ function initialsFor(profile: UserProfile | null, user: User | null) {
   return user?.email?.slice(0, 2).toUpperCase() || 'BM';
 }
 
-export default function ProfilePage({ user, profile, loading, posts, onCreatePost, onEditProfile, onAuthOpen, onSignOut }: ProfilePageProps) {
+export default function ProfilePage({
+  user,
+  profile,
+  loading,
+  posts,
+  savedPosts,
+  savedPostIds,
+  onCreatePost,
+  onEditProfile,
+  onToggleSave,
+  onAuthOpen,
+  onSignOut
+}: ProfilePageProps) {
   const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'stats' | 'saved'>('posts');
 
   if (loading) {
@@ -160,10 +175,23 @@ export default function ProfilePage({ user, profile, loading, posts, onCreatePos
         )}
 
         {activeProfileTab === 'saved' && (
-          <div className="premium-empty">
-            <b>No saved spots yet</b>
-            <span>Bookmarked parks and training locations will live here.</span>
-          </div>
+          savedPosts.length > 0 ? (
+            <div className="profile-saved-feed">
+              {savedPosts.map(post => (
+                <PostCard
+                  post={post}
+                  saved={savedPostIds.has(post.id)}
+                  onToggleSave={onToggleSave}
+                  key={post.id}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="premium-empty">
+              <b>No saved posts yet</b>
+              <span>Bookmark posts from the feed and they will appear here.</span>
+            </div>
+          )
         )}
       </section>
     </main>

@@ -139,6 +139,43 @@ create policy "Users can delete their own posts"
   to authenticated
   using (auth.uid() = user_id);
 
+create table if not exists public.saved_posts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  post_id text not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, post_id)
+);
+
+create index if not exists saved_posts_user_created_at_idx
+  on public.saved_posts (user_id, created_at desc);
+
+create index if not exists saved_posts_user_post_idx
+  on public.saved_posts (user_id, post_id);
+
+alter table public.saved_posts enable row level security;
+
+drop policy if exists "Users can read their own saved posts" on public.saved_posts;
+create policy "Users can read their own saved posts"
+  on public.saved_posts
+  for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can save posts for themselves" on public.saved_posts;
+create policy "Users can save posts for themselves"
+  on public.saved_posts
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can unsave their own posts" on public.saved_posts;
+create policy "Users can unsave their own posts"
+  on public.saved_posts
+  for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'post-media',
