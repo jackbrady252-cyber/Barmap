@@ -179,25 +179,27 @@ export default function PostCard({ post, saved: savedProp, onToggleSave }: PostC
             </button>
             <span className="sheet-kicker">Comments</span>
             <h3>{comments} notes from the crew</h3>
-            {post.commentPreview ? (
-              <div className="comment-preview">
-                <UserAvatar user={post.user} size="sm" />
-                <p>{post.commentPreview}</p>
-              </div>
-            ) : localComments.length === 0 ? (
-              <div className="premium-empty compact">
-                <b>No comments yet</b>
-                <span>Be first to add signal to this session.</span>
-              </div>
-            ) : (
-              null
-            )}
-            {localComments.map((comment, index) => (
-              <div className="comment-preview" key={`${post.id}-comment-${index}`}>
-                <UserAvatar user={post.user} size="sm" />
-                <p>{comment}</p>
-              </div>
-            ))}
+            <div className="comment-list">
+              {post.commentPreview ? (
+                <div className="comment-preview">
+                  <UserAvatar user={post.user} size="sm" />
+                  <p>{post.commentPreview}</p>
+                </div>
+              ) : localComments.length === 0 ? (
+                <div className="premium-empty compact">
+                  <b>No comments yet</b>
+                  <span>Be first to add signal to this session.</span>
+                </div>
+              ) : (
+                null
+              )}
+              {localComments.map((comment, index) => (
+                <div className="comment-preview" key={`${post.id}-comment-${index}`}>
+                  <UserAvatar user={post.user} size="sm" />
+                  <p>{comment}</p>
+                </div>
+              ))}
+            </div>
             <div className="comment-composer" onClick={event => event.stopPropagation()}>
               <input
                 type="text"
