@@ -7,6 +7,7 @@ import AuthModal from '@/components/AuthModal';
 import BottomNav, { type AppTab } from '@/components/BottomNav';
 import ChallengesPage from '@/components/ChallengesPage';
 import CreatePostModal from '@/components/CreatePostModal';
+import EditProfileModal from '@/components/EditProfileModal';
 import EventsPage from '@/components/EventsPage';
 import FeedPage from '@/components/FeedPage';
 import { PlusIcon } from '@/components/icons';
@@ -36,6 +37,7 @@ export default function Home() {
   const [activeParkTab, setActiveParkTab] = useState('feed');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [createPostOpen, setCreatePostOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -207,6 +209,7 @@ export default function Home() {
           loading={authLoading}
           posts={posts.filter(post => post.createdBy === user?.id)}
           onCreatePost={() => setCreatePostOpen(true)}
+          onEditProfile={() => setEditProfileOpen(true)}
           onAuthOpen={openAuth}
           onSignOut={handleSignOut}
         />
@@ -299,6 +302,15 @@ export default function Home() {
           void loadPosts();
           setActiveAppTab('feed');
           showNotice('Post created.');
+        }}
+      />
+      <EditProfileModal
+        open={editProfileOpen}
+        profile={profile}
+        onClose={() => setEditProfileOpen(false)}
+        onSaved={nextProfile => {
+          setProfile(nextProfile);
+          showNotice('Profile saved.');
         }}
       />
     </div>

@@ -248,7 +248,27 @@ function Tabs({ activeTab, onTabChange }: { activeTab: string; onTabChange: (tab
 }
 
 function Post({ post }: { post: FeedPost }) {
+  const [liked, setLiked] = useState(false);
+  const [shared, setShared] = useState(false);
   const initials = post.user.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+  const likes = Math.floor(seeded(post.user.length + post.text.length) * 40 + 3) + (liked ? 1 : 0);
+  const comments = Math.floor(seeded(post.user.length * 2 + post.text.length) * 8);
+
+  async function shareParkPost() {
+    const text = `${post.user}: ${post.text}`;
+    try {
+      const nav = typeof navigator !== 'undefined' ? navigator : null;
+      if (nav?.share) {
+        await nav.share({ title: 'BARMAP park post', text });
+      } else if (nav?.clipboard) {
+        await nav.clipboard.writeText(text);
+      }
+      setShared(true);
+      window.setTimeout(() => setShared(false), 1800);
+    } catch {
+      setShared(false);
+    }
+  }
 
   return (
     <div className="post">
@@ -263,9 +283,13 @@ function Post({ post }: { post: FeedPost }) {
         </div>
       )}
       <div className="post-foot">
-        <span className="action"><HeartIcon /> {Math.floor(seeded(post.user.length + post.text.length) * 40 + 3)}</span>
-        <span className="action"><CommentIcon /> {Math.floor(seeded(post.user.length * 2 + post.text.length) * 8)}</span>
-        <span className="action"><ShareIcon /> Share</span>
+        <button className={`action${liked ? ' active' : ''}`} type="button" onClick={() => setLiked(current => !current)}>
+          <HeartIcon /> {likes}
+        </button>
+        <span className="action"><CommentIcon /> {comments}</span>
+        <button className="action" type="button" onClick={shareParkPost}>
+          <ShareIcon /> {shared ? 'Copied' : 'Share'}
+        </button>
       </div>
     </div>
   );
@@ -285,16 +309,12 @@ function Meetups({
       <div className="panel-empty-state">
         <b>No meetups yet</b>
         <span>Community sessions for this park will appear here.</span>
-        <button className="btn-primary btn" onClick={() => window.alert('Coming soon!')}>Host a meetup</button>
       </div>
     );
   }
 
   return (
     <>
-      <button className="btn-primary btn panel-action-full" onClick={() => window.alert('Coming soon!')}>
-        Host a meetup
-      </button>
       {park.meetups.map((meetup, index) => (
         <MeetupCard
           meetup={meetup}

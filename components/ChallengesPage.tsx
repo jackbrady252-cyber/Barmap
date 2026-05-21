@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import type { Park } from '@/types/park';
 
 export default function ChallengesPage({ parks }: { parks: Park[] }) {
+  const [joinedMissions, setJoinedMissions] = useState<Record<string, boolean>>({});
   const sourceParks = parks.slice(0, 4);
   const missions = [
     {
@@ -61,7 +63,13 @@ export default function ChallengesPage({ parks }: { parks: Park[] }) {
             <div className="progress-track" aria-label={`${mission.progress}% progress`}>
               <div style={{ width: `${mission.progress}%` }} />
             </div>
-            <button className="btn btn-primary" type="button">Join Mission</button>
+            <button
+              className={joinedMissions[mission.title] ? 'btn btn-ghost' : 'btn btn-primary'}
+              type="button"
+              onClick={() => setJoinedMissions(current => ({ ...current, [mission.title]: !current[mission.title] }))}
+            >
+              {joinedMissions[mission.title] ? 'Joined' : 'Join Mission'}
+            </button>
           </article>
         ))}
       </div>

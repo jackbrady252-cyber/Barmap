@@ -12,6 +12,7 @@ type ProfilePageProps = {
   loading: boolean;
   posts: SocialPost[];
   onCreatePost: () => void;
+  onEditProfile: () => void;
   onAuthOpen: (mode: AuthMode) => void;
   onSignOut: () => void;
 };
@@ -29,7 +30,7 @@ function initialsFor(profile: UserProfile | null, user: User | null) {
   return user?.email?.slice(0, 2).toUpperCase() || 'BM';
 }
 
-export default function ProfilePage({ user, profile, loading, posts, onCreatePost, onAuthOpen, onSignOut }: ProfilePageProps) {
+export default function ProfilePage({ user, profile, loading, posts, onCreatePost, onEditProfile, onAuthOpen, onSignOut }: ProfilePageProps) {
   const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'stats' | 'saved'>('posts');
 
   if (loading) {
@@ -73,7 +74,11 @@ export default function ProfilePage({ user, profile, loading, posts, onCreatePos
   return (
     <main className="app-main app-page profile-page">
       <div className="profile-hero">
-        <div className="avatar profile-avatar">{initialsFor(profile, user)}</div>
+        {profile?.avatarUrl ? (
+          <img className="avatar profile-avatar profile-avatar-img" src={profile.avatarUrl} alt="" />
+        ) : (
+          <div className="avatar profile-avatar">{initialsFor(profile, user)}</div>
+        )}
         <div className="profile-identity">
           <span className="page-kicker">Profile</span>
           <h1>{displayName}</h1>
@@ -101,7 +106,7 @@ export default function ProfilePage({ user, profile, loading, posts, onCreatePos
       </section>
 
       <div className="profile-actions">
-        <button className="btn btn-primary" type="button">Edit Profile</button>
+        <button className="btn btn-primary" type="button" onClick={onEditProfile}>Edit Profile</button>
         <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
       </div>
 

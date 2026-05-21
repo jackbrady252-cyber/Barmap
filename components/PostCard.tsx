@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BookmarkIcon, CloseIcon, CommentIcon, HeartIcon, PlayIcon, ShareIcon } from '@/components/icons';
 import LocationTag from '@/components/LocationTag';
 import UserAvatar from '@/components/UserAvatar';
@@ -14,15 +14,76 @@ export default function PostCard({ post }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(post.saved);
   const [commentOpen, setCommentOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [localComments, setLocalComments] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState('');
 
   const likes = post.likes + (liked ? 1 : 0);
-  const comments = post.comments;
+  const comments = post.comments + localComments.length;
+  const storageKey = useMemo(() => `barmap:post:${post.id}:saved`, [post.id]);
+  const commentsKey = useMemo(() => `barmap:post:${post.id}:comments`, [post.id]);
   const backgroundImage = post.mediaUrl
     ? `url("${post.mediaUrl}")`
     : post.park?.img
       ? `url("${post.park.img}")`
       : undefined;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedSaved = window.localStorage.getItem(storageKey);
+    if (storedSaved) setSaved(storedSaved === 'true');
+
+    try {
+      const storedComments = JSON.parse(window.localStorage.getItem(commentsKey) || '[]');
+      if (Array.isArray(storedComments)) setLocalComments(storedComments.filter(item => typeof item === 'string'));
+    } catch {
+      setLocalComments([]);
+    }
+  }, [commentsKey, storageKey]);
+
+  function toggleSaved() {
+    setSaved(current => {
+      const next = !current;
+      if (typeof window !== 'undefined') window.localStorage.setItem(storageKey, String(next));
+      return next;
+    });
+  }
+
+  function submitComment() {
+    const text = commentText.trim();
+    if (!text) return;
+
+    setLocalComments(current => {
+      const next = [text, ...current];
+      if (typeof window !== 'undefined') window.localStorage.setItem(commentsKey, JSON.stringify(next));
+      return next;
+    });
+    setCommentText('');
+  }
+
+  async function sharePost() {
+    const url = typeof window !== 'undefined' ? `${window.location.origin}/?post=${post.id}` : '';
+    const title = `BARMAP post by ${post.user.name}`;
+    const text = post.caption;
+
+    try {
+      const nav = typeof navigator !== 'undefined' ? navigator : null;
+      if (nav?.share) {
+        await nav.share({ title, text, url });
+        setFeedback('Shared.');
+      } else if (nav?.clipboard && url) {
+        await nav.clipboard.writeText(url);
+        setFeedback('Link copied.');
+      } else {
+        setFeedback('Share link unavailable in this browser.');
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setFeedback('Could not share this post.');
+    }
+
+    window.setTimeout(() => setFeedback(''), 2200);
+  }
 
   return (
     <article className="social-post">
@@ -74,16 +135,18 @@ export default function PostCard({ post }: PostCardProps) {
             className={saved ? 'active' : ''}
             type="button"
             aria-label={saved ? 'Remove saved post' : 'Save post'}
-            onClick={() => setSaved(current => !current)}
+            onClick={toggleSaved}
           >
             <BookmarkIcon />
             <span>Save</span>
           </button>
-          <button type="button" aria-label="Share post" onClick={() => setShareOpen(true)}>
+          <button type="button" aria-label="Share post" onClick={sharePost}>
             <ShareIcon />
             <span>Share</span>
           </button>
         </div>
+
+        {feedback && <div className="post-feedback">{feedback}</div>}
 
         <div className="post-community">
           <span>{likes} likes</span>
@@ -105,34 +168,47 @@ export default function PostCard({ post }: PostCardProps) {
                 <UserAvatar user={post.user} size="sm" />
                 <p>{post.commentPreview}</p>
               </div>
-            ) : (
+            ) : localComments.length === 0 ? (
               <div className="premium-empty compact">
                 <b>No comments yet</b>
                 <span>Be first to add signal to this session.</span>
               </div>
+            ) : (
+              null
             )}
-            <div className="comment-composer">
-              <input type="text" placeholder="Add a comment..." aria-label="Add a comment" />
-              <button className="btn btn-primary" type="button">Send</button>
+            {localComments.map((comment, index) => (
+              <div className="comment-preview" key={`${post.id}-comment-${index}`}>
+                <UserAvatar user={post.user} size="sm" />
+                <p>{comment}</p>
+              </div>
+            ))}
+            <div className="comment-composer" onClick={event => event.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Add a comment..."
+                aria-label="Add a comment"
+                value={commentText}
+                onChange={event => setCommentText(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') submitComment();
+                }}
+              />
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={!commentText.trim()}
+                onMouseDown={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={event => {
+                  event.stopPropagation();
+                  submitComment();
+                }}
+              >
+                Send
+              </button>
             </div>
-          </section>
-        </div>
-      )}
-
-      {shareOpen && (
-        <div className="sheet-backdrop" onClick={() => setShareOpen(false)}>
-          <section className="action-sheet" role="dialog" aria-modal="true" aria-label="Share post" onClick={event => event.stopPropagation()}>
-            <button className="sheet-close" type="button" onClick={() => setShareOpen(false)} aria-label="Close share sheet">
-              <CloseIcon />
-            </button>
-            <span className="sheet-kicker">Share</span>
-            <h3>Send this session</h3>
-            <div className="share-grid">
-              <button type="button">Copy Link</button>
-              <button type="button">Share Profile</button>
-              <button type="button">Open Spot</button>
-            </div>
-            <p className="sheet-note">Sharing is a frontend placeholder until social delivery is connected.</p>
           </section>
         </div>
       )}

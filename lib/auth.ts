@@ -20,6 +20,15 @@ type SignUpInput = {
   homeCity: string;
 };
 
+export type UpdateProfileInput = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  bio: string;
+  homeCity: string;
+};
+
 function rowToProfile(row: ProfileRow): UserProfile {
   return {
     id: row.id,
@@ -175,4 +184,28 @@ export async function signOut() {
   if (!supabase) return;
   const { error } = await supabase.auth.signOut();
   if (error) throw authStageError('Logout failed', error);
+}
+
+export async function updateProfile(input: UpdateProfileInput): Promise<UserProfile> {
+  const configError = getConfigurationError();
+  if (!supabase || configError) throw new Error(configError || 'Supabase is not configured.');
+
+  const username = normalizeUsername(input.username);
+  const displayName = input.displayName.trim() || username;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      username,
+      display_name: displayName,
+      avatar_url: input.avatarUrl.trim(),
+      bio: input.bio.trim(),
+      home_city: input.homeCity.trim()
+    })
+    .eq('id', input.id)
+    .select('id,username,display_name,avatar_url,bio,home_city,created_at')
+    .single<ProfileRow>();
+
+  if (error) throw authStageError('Profile update failed', error);
+  return rowToProfile(data);
 }

@@ -94,7 +94,7 @@ export default function CreatePostModal({ open, user, profile, parks, onClose, o
             <label htmlFor="post-media-type">Media</label>
             <select id="post-media-type" value={mediaType} onChange={event => setMediaType(event.target.value as 'image' | 'video')}>
               <option value="image">Image upload</option>
-              <option value="video">Video placeholder</option>
+              <option value="video">Video post</option>
             </select>
           </div>
 
@@ -118,7 +118,7 @@ export default function CreatePostModal({ open, user, profile, parks, onClose, o
           )}
 
           {mediaType === 'video' && (
-            <p className="form-help full">Video posts are saved as placeholders for now. Upload support can come next.</p>
+            <p className="form-help full">Video posts save as a media-type marker without an upload.</p>
           )}
 
           <div className="form-field full">

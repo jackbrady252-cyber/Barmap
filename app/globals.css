@@ -262,8 +262,10 @@ body.marking-spot #map { cursor: crosshair; }
 .post-head .meta .time { color: var(--muted); font-size: 11px; }
 .post-body { font-size: 13px; line-height: 1.5; color: var(--text-dim); white-space: pre-wrap; }
 .post-foot { display: flex; gap: 16px; margin-top: 10px; color: var(--muted); font-size: 11px; }
-.post-foot .action { cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color .15s ease; }
+.post-foot .action { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; display: flex; align-items: center; gap: 4px; transition: color .15s ease; }
+button.action { cursor: pointer; }
 .post-foot .action:hover { color: var(--accent); }
+.post-foot .action.active { color: var(--accent-soft); }
 .workout-tag { display: inline-block; background: rgba(199,164,90,.08); border: 1px solid rgba(199,164,90,.26); color: var(--verified-soft); padding: 2px 8px; border-radius: 4px; font-size: 10px; margin-right: 4px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
 
 .avatar-sm { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 11px; flex-shrink: 0; font-family: var(--display); }
@@ -304,13 +306,14 @@ body.marking-spot #map { cursor: crosshair; }
 /* Profile modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 1500; backdrop-filter: blur(8px); }
 .modal-bg.open { display: flex; }
-.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; width: 400px; max-width: 92vw; overflow: hidden; position: relative; box-shadow: 0 24px 64px rgba(0,0,0,.48); }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; width: 400px; max-width: 92vw; max-height: calc(100dvh - 32px); overflow-y: auto; position: relative; box-shadow: 0 24px 64px rgba(0,0,0,.48); }
 .modal-head { padding: 28px 20px 20px; text-align: center; background: linear-gradient(135deg, rgba(199,164,90,.1), rgba(255,255,255,.02)); border-bottom: 1px solid var(--border-soft); }
 .modal-head .avatar-lg { width: 78px; height: 78px; border-radius: 50%; background: linear-gradient(135deg, #d4bb75, #80632d); margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #1a0d05; font-size: 28px; font-family: var(--display); }
 .modal-head h3 { margin: 0; font-family: var(--display); font-size: 20px; letter-spacing: -.01em; }
 .modal-head .handle { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .modal-body { padding: 16px 20px 22px; }
 .auth-modal { width: 440px; }
+.edit-profile-modal .modal-body { padding-bottom: max(22px, env(safe-area-inset-bottom)); }
 .create-post-modal { width: 480px; }
 .modal-icon {
   width: 52px; height: 52px; border-radius: 50%; margin: 0 auto 12px;
@@ -487,6 +490,10 @@ body.marking-spot #map { cursor: crosshair; }
 .post-actions-row button:hover { color: var(--accent-soft); background: rgba(199,164,90,.08); }
 .post-actions-row button.active { color: #171207; background: var(--accent); }
 .post-actions-row .icon { width: 17px; height: 17px; }
+.post-feedback {
+  justify-self: start; color: var(--accent-soft); background: rgba(199,164,90,.1);
+  border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800;
+}
 
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 1600; background: rgba(0,0,0,.56);
@@ -494,7 +501,8 @@ body.marking-spot #map { cursor: crosshair; }
   backdrop-filter: blur(14px);
 }
 .action-sheet {
-  width: min(100%, 480px); border-radius: 22px; padding: 22px;
+  width: min(100%, 480px); max-height: calc(100dvh - 96px); overflow-y: auto;
+  border-radius: 22px; padding: 22px;
   background: linear-gradient(180deg, rgba(28,26,20,.98), rgba(12,11,8,.99));
   border: 1px solid rgba(244,239,227,.08);
   box-shadow: 0 28px 80px rgba(0,0,0,.48); position: relative;
@@ -516,7 +524,7 @@ body.marking-spot #map { cursor: crosshair; }
 .comment-preview p, .sheet-note { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.5; }
 .comment-composer { display: flex; gap: 8px; margin-top: 16px; }
 .comment-composer input {
-  flex: 1; min-width: 0; border: 0; border-radius: 999px; padding: 0 14px;
+  flex: 1; min-width: 0; min-height: 44px; border: 0; border-radius: 999px; padding: 0 14px;
   background: rgba(244,239,227,.06); color: var(--text); font-family: var(--body);
 }
 .comment-composer input:focus { outline: 1px solid rgba(199,164,90,.38); }
@@ -570,6 +578,7 @@ body.marking-spot #map { cursor: crosshair; }
   padding: 18px 0 16px;
 }
 .profile-avatar { width: 92px; height: 92px; margin: 0; font-size: 30px; }
+.profile-avatar-img { object-fit: cover; padding: 0; }
 .profile-identity h1 { margin: 6px 0 4px; font-size: 30px; }
 .profile-identity p { margin: 0; color: var(--muted); }
 .profile-bio { max-width: 520px; margin-top: 9px !important; color: var(--text-dim) !important; line-height: 1.55; }
