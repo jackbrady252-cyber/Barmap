@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BookmarkIcon, CommentIcon, HeartIcon, PlayIcon, ShareIcon } from '@/components/icons';
+import { BookmarkIcon, CloseIcon, CommentIcon, HeartIcon, PlayIcon, ShareIcon } from '@/components/icons';
 import LocationTag from '@/components/LocationTag';
 import UserAvatar from '@/components/UserAvatar';
 import type { SocialPost } from '@/types/social';
@@ -13,8 +13,11 @@ type PostCardProps = {
 export default function PostCard({ post }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(post.saved);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const likes = post.likes + (liked ? 1 : 0);
+  const comments = post.comments;
   const backgroundImage = post.mediaUrl
     ? `url("${post.mediaUrl}")`
     : post.park?.img
@@ -63,9 +66,9 @@ export default function PostCard({ post }: PostCardProps) {
             <HeartIcon />
             <span>{likes}</span>
           </button>
-          <button type="button" aria-label="View comments">
+          <button type="button" aria-label="View comments" onClick={() => setCommentOpen(true)}>
             <CommentIcon />
-            <span>{post.comments}</span>
+            <span>{comments}</span>
           </button>
           <button
             className={saved ? 'active' : ''}
@@ -76,7 +79,7 @@ export default function PostCard({ post }: PostCardProps) {
             <BookmarkIcon />
             <span>Save</span>
           </button>
-          <button type="button" aria-label="Share post">
+          <button type="button" aria-label="Share post" onClick={() => setShareOpen(true)}>
             <ShareIcon />
             <span>Share</span>
           </button>
@@ -84,10 +87,55 @@ export default function PostCard({ post }: PostCardProps) {
 
         <div className="post-community">
           <span>{likes} likes</span>
-          <span>{post.comments} comments</span>
+          <span>{comments} comments</span>
           {post.commentPreview && <b>{post.commentPreview}</b>}
         </div>
       </div>
+
+      {commentOpen && (
+        <div className="sheet-backdrop" onClick={() => setCommentOpen(false)}>
+          <section className="action-sheet" role="dialog" aria-modal="true" aria-label="Comments" onClick={event => event.stopPropagation()}>
+            <button className="sheet-close" type="button" onClick={() => setCommentOpen(false)} aria-label="Close comments">
+              <CloseIcon />
+            </button>
+            <span className="sheet-kicker">Comments</span>
+            <h3>{comments} notes from the crew</h3>
+            {post.commentPreview ? (
+              <div className="comment-preview">
+                <UserAvatar user={post.user} size="sm" />
+                <p>{post.commentPreview}</p>
+              </div>
+            ) : (
+              <div className="premium-empty compact">
+                <b>No comments yet</b>
+                <span>Be first to add signal to this session.</span>
+              </div>
+            )}
+            <div className="comment-composer">
+              <input type="text" placeholder="Add a comment..." aria-label="Add a comment" />
+              <button className="btn btn-primary" type="button">Send</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {shareOpen && (
+        <div className="sheet-backdrop" onClick={() => setShareOpen(false)}>
+          <section className="action-sheet" role="dialog" aria-modal="true" aria-label="Share post" onClick={event => event.stopPropagation()}>
+            <button className="sheet-close" type="button" onClick={() => setShareOpen(false)} aria-label="Close share sheet">
+              <CloseIcon />
+            </button>
+            <span className="sheet-kicker">Share</span>
+            <h3>Send this session</h3>
+            <div className="share-grid">
+              <button type="button">Copy Link</button>
+              <button type="button">Share Profile</button>
+              <button type="button">Open Spot</button>
+            </div>
+            <p className="sheet-note">Sharing is a frontend placeholder until social delivery is connected.</p>
+          </section>
+        </div>
+      )}
     </article>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import type { User } from '@supabase/supabase-js';
+import { useState } from 'react';
 import PostCard from '@/components/PostCard';
 import type { AuthMode, UserProfile } from '@/types/auth';
 import type { SocialPost } from '@/types/social';
@@ -10,6 +11,7 @@ type ProfilePageProps = {
   profile: UserProfile | null;
   loading: boolean;
   posts: SocialPost[];
+  onCreatePost: () => void;
   onAuthOpen: (mode: AuthMode) => void;
   onSignOut: () => void;
 };
@@ -27,7 +29,9 @@ function initialsFor(profile: UserProfile | null, user: User | null) {
   return user?.email?.slice(0, 2).toUpperCase() || 'BM';
 }
 
-export default function ProfilePage({ user, profile, loading, posts, onAuthOpen, onSignOut }: ProfilePageProps) {
+export default function ProfilePage({ user, profile, loading, posts, onCreatePost, onAuthOpen, onSignOut }: ProfilePageProps) {
+  const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'stats' | 'saved'>('posts');
+
   if (loading) {
     return (
       <main className="app-main app-page profile-page">
@@ -64,23 +68,23 @@ export default function ProfilePage({ user, profile, loading, posts, onAuthOpen,
   const displayName = profile?.displayName || user.email || 'BARMAP Athlete';
   const username = profile?.username ? `@${profile.username}` : user.email || '';
   const homeCity = profile?.homeCity || 'Ireland';
+  const postTiles = posts.slice(0, 12);
 
   return (
     <main className="app-main app-page profile-page">
       <div className="profile-hero">
         <div className="avatar profile-avatar">{initialsFor(profile, user)}</div>
-        <h1>{displayName}</h1>
-        <p>{username} - {homeCity}</p>
-        {profile?.bio && <p className="profile-bio">{profile.bio}</p>}
+        <div className="profile-identity">
+          <span className="page-kicker">Profile</span>
+          <h1>{displayName}</h1>
+          <p>{username} · {homeCity}</p>
+          <p className="profile-bio">{profile?.bio || 'Calisthenics, verified spots, quiet sessions.'}</p>
+        </div>
       </div>
-      <section className="profile-dashboard" aria-label="Profile dashboard">
+      <section className="profile-stat-row" aria-label="Profile stats">
         <div>
           <b>{posts.length}</b>
           <span>Posts</span>
-        </div>
-        <div>
-          <b>0</b>
-          <span>Saved spots</span>
         </div>
         <div>
           <b>0</b>
@@ -88,34 +92,72 @@ export default function ProfilePage({ user, profile, loading, posts, onAuthOpen,
         </div>
         <div>
           <b>0</b>
-          <span>Followers</span>
+          <span>Sessions</span>
         </div>
         <div>
           <b>0</b>
-          <span>Following</span>
-        </div>
-        <div>
-          <b>0</b>
-          <span>Day streak</span>
+          <span>Spots</span>
         </div>
       </section>
-      <section className="profile-section">
-        <h3>Account</h3>
-        <div className="compact-card"><span>Email</span><b>{user.email}</b></div>
-        <div className="compact-card"><span>Home city</span><b>{homeCity}</b></div>
-        <div className="compact-card"><span>Member since</span><b>{profile?.createdAt ? new Date(profile.createdAt).getFullYear() : 'New'}</b></div>
-        <button className="btn btn-ghost profile-signout" type="button" onClick={onSignOut}>
-          Log Out
-        </button>
-      </section>
-      <section className="profile-section profile-posts">
-        <h3>Uploaded posts</h3>
-        {posts.length > 0 ? (
-          posts.map(post => <PostCard post={post} key={post.id} />)
-        ) : (
-          <div className="panel-empty-state">
-            <b>No posts yet</b>
-            <span>Your uploaded sessions will show here once you create your first post.</span>
+
+      <div className="profile-actions">
+        <button className="btn btn-primary" type="button">Edit Profile</button>
+        <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
+      </div>
+
+      <section className="profile-tabs" aria-label="Profile content">
+        <div className="profile-tab-list">
+          {[
+            ['posts', 'Posts'],
+            ['stats', 'Stats'],
+            ['saved', 'Saved Spots']
+          ].map(([id, label]) => (
+            <button
+              className={activeProfileTab === id ? 'active' : ''}
+              type="button"
+              key={id}
+              onClick={() => setActiveProfileTab(id as 'posts' | 'stats' | 'saved')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeProfileTab === 'posts' && (
+          postTiles.length > 0 ? (
+            <div className="profile-post-grid">
+              {postTiles.map(post => (
+                <div
+                  className="profile-post-tile"
+                  style={{ backgroundImage: post.mediaUrl ? `url("${post.mediaUrl}")` : post.park?.img ? `url("${post.park.img}")` : undefined }}
+                  key={post.id}
+                >
+                  <span>{post.mediaType}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="premium-empty">
+              <b>No posts yet</b>
+              <span>Your training archive starts with one session.</span>
+              <button className="btn btn-primary" type="button" onClick={onCreatePost}>Create your first post</button>
+            </div>
+          )
+        )}
+
+        {activeProfileTab === 'stats' && (
+          <div className="profile-stats-list">
+            <div><span>Training streak</span><b>0 days</b></div>
+            <div><span>Missions completed</span><b>0</b></div>
+            <div><span>Sessions hosted</span><b>0</b></div>
+            <div><span>Member since</span><b>{profile?.createdAt ? new Date(profile.createdAt).getFullYear() : 'New'}</b></div>
+          </div>
+        )}
+
+        {activeProfileTab === 'saved' && (
+          <div className="premium-empty">
+            <b>No saved spots yet</b>
+            <span>Bookmarked parks and training locations will live here.</span>
           </div>
         )}
       </section>

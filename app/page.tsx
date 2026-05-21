@@ -206,6 +206,7 @@ export default function Home() {
           profile={profile}
           loading={authLoading}
           posts={posts.filter(post => post.createdBy === user?.id)}
+          onCreatePost={() => setCreatePostOpen(true)}
           onAuthOpen={openAuth}
           onSignOut={handleSignOut}
         />
