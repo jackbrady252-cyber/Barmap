@@ -1,0 +1,360 @@
+'use client';
+
+import type { User } from '@supabase/supabase-js';
+import type { FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getCurrentUser, loginWithEmail, signOut } from '@/lib/auth';
+import {
+  createDiscoveryCandidate,
+  fetchDiscoveryCandidates,
+  isCurrentUserAdmin,
+  parseEquipmentGuess,
+  reviewDiscoveryCandidate
+} from '@/lib/discovery';
+import { supabaseConfigured, supabaseConfigStatus } from '@/lib/supabase';
+import type { DiscoveryCandidate } from '@/types/discovery';
+
+const initialForm = {
+  name: '',
+  area: '',
+  lat: '',
+  lng: '',
+  source: '',
+  sourceUrl: '',
+  evidence: '',
+  equipmentGuess: '',
+  photoUrl: '',
+  attribution: '',
+  confidenceScore: '50'
+};
+
+function configurationMessage() {
+  return [
+    ...supabaseConfigStatus.missing.map(name => `${name} is missing or empty`),
+    ...supabaseConfigStatus.invalid
+  ].join('. ');
+}
+
+export default function DiscoveryAdminPage() {
+  const [loading, setLoading] = useState(true);
+  const [checkingAdmin, setCheckingAdmin] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [admin, setAdmin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [candidates, setCandidates] = useState<DiscoveryCandidate[]>([]);
+  const [form, setForm] = useState(initialForm);
+  const [message, setMessage] = useState('');
+  const [busyCandidateId, setBusyCandidateId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const pendingCount = candidates.length;
+  const confidenceValue = useMemo(() => {
+    const parsed = Number(form.confidenceScore);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.min(100, parsed));
+  }, [form.confidenceScore]);
+
+  const loadCandidates = useCallback(async () => {
+    const nextCandidates = await fetchDiscoveryCandidates('pending');
+    setCandidates(nextCandidates);
+  }, []);
+
+  const checkSession = useCallback(async () => {
+    setLoading(true);
+    setAuthMessage('');
+
+    try {
+      const nextUser = await getCurrentUser();
+      setUser(nextUser);
+      if (!nextUser) {
+        setAdmin(false);
+        return;
+      }
+
+      setCheckingAdmin(true);
+      const nextAdmin = await isCurrentUserAdmin();
+      setAdmin(nextAdmin);
+      if (nextAdmin) await loadCandidates();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Admin check failed.');
+    } finally {
+      setCheckingAdmin(false);
+      setLoading(false);
+    }
+  }, [loadCandidates]);
+
+  useEffect(() => {
+    void checkSession();
+  }, [checkSession]);
+
+  function updateField(field: keyof typeof initialForm, value: string) {
+    setForm(current => ({ ...current, [field]: value }));
+  }
+
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthMessage('');
+
+    try {
+      await loginWithEmail(email, password);
+      await checkSession();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Login failed.');
+    }
+  }
+
+  async function logout() {
+    await signOut();
+    setUser(null);
+    setAdmin(false);
+    setCandidates([]);
+  }
+
+  async function addCandidate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage('');
+
+    const lat = Number(form.lat);
+    const lng = Number(form.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setMessage('Latitude and longitude must be valid numbers.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await createDiscoveryCandidate({
+        name: form.name.trim(),
+        area: form.area.trim(),
+        lat,
+        lng,
+        source: form.source.trim(),
+        sourceUrl: form.sourceUrl.trim(),
+        evidence: form.evidence.trim(),
+        equipmentGuess: parseEquipmentGuess(form.equipmentGuess),
+        photoUrl: form.photoUrl.trim(),
+        attribution: form.attribution.trim(),
+        confidenceScore: confidenceValue
+      });
+      setForm(initialForm);
+      setMessage('Candidate added to review queue.');
+      await loadCandidates();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Candidate creation failed.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reviewCandidate(candidate: DiscoveryCandidate, status: 'approved' | 'rejected') {
+    setBusyCandidateId(candidate.id);
+    setMessage('');
+
+    try {
+      await reviewDiscoveryCandidate(candidate.id, status);
+      setMessage(status === 'approved' ? 'Candidate approved and published to public spots.' : 'Candidate rejected and retained for records.');
+      await loadCandidates();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Candidate review failed.');
+    } finally {
+      setBusyCandidateId('');
+    }
+  }
+
+  if (!supabaseConfigured) {
+    return (
+      <main className="admin-discovery-page">
+        <section className="admin-gate">
+          <span className="page-kicker">Discovery Admin</span>
+          <h1>Supabase setup required</h1>
+          <p>{configurationMessage() || 'Supabase is not configured.'}</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (loading || checkingAdmin) {
+    return (
+      <main className="admin-discovery-page">
+        <section className="admin-gate">
+          <span className="page-kicker">Discovery Admin</span>
+          <h1>Checking access</h1>
+          <p>BARMAP is verifying your session and admin permissions.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="admin-discovery-page">
+        <section className="admin-gate">
+          <span className="page-kicker">Discovery Admin</span>
+          <h1>Admin login required</h1>
+          <p>This internal review queue is hidden from the public app.</p>
+          <form className="admin-login-form" onSubmit={login}>
+            <div className="form-field">
+              <label htmlFor="admin-email">Email</label>
+              <input id="admin-email" type="email" value={email} onChange={event => setEmail(event.target.value)} required />
+            </div>
+            <div className="form-field">
+              <label htmlFor="admin-password">Password</label>
+              <input id="admin-password" type="password" value={password} onChange={event => setPassword(event.target.value)} required />
+            </div>
+            {authMessage && <p className="auth-message">{authMessage}</p>}
+            <button className="btn btn-primary" type="submit">Log In</button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
+  if (!admin) {
+    return (
+      <main className="admin-discovery-page">
+        <section className="admin-gate">
+          <span className="page-kicker">Discovery Admin</span>
+          <h1>Access blocked</h1>
+          <p>{user.email} is logged in, but this account is not a BARMAP admin.</p>
+          {authMessage && <p className="auth-message">{authMessage}</p>}
+          <button className="btn btn-ghost" type="button" onClick={logout}>Log Out</button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="admin-discovery-page">
+      <section className="admin-discovery-hero">
+        <div>
+          <span className="page-kicker">Discovery Admin</span>
+          <h1>Review possible training spots before they reach the map.</h1>
+          <p>Every finding stays private until you approve it. Approval copies the candidate into public spots; rejection keeps the record internal.</p>
+        </div>
+        <div className="admin-status-card">
+          <b>{pendingCount}</b>
+          <span>Pending</span>
+          <button className="btn btn-ghost" type="button" onClick={logout}>Log Out</button>
+        </div>
+      </section>
+
+      <section className="admin-discovery-grid">
+        <form className="admin-discovery-form" onSubmit={addCandidate}>
+          <div className="admin-section-head">
+            <span className="page-kicker">Manual Intake</span>
+            <h2>Add candidate</h2>
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-name">Name</label>
+            <input id="candidate-name" value={form.name} onChange={event => updateField('name', event.target.value)} required />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-area">Area</label>
+            <input id="candidate-area" value={form.area} onChange={event => updateField('area', event.target.value)} required />
+          </div>
+          <div className="admin-two-col">
+            <div className="form-field">
+              <label htmlFor="candidate-lat">Latitude</label>
+              <input id="candidate-lat" inputMode="decimal" value={form.lat} onChange={event => updateField('lat', event.target.value)} required />
+            </div>
+            <div className="form-field">
+              <label htmlFor="candidate-lng">Longitude</label>
+              <input id="candidate-lng" inputMode="decimal" value={form.lng} onChange={event => updateField('lng', event.target.value)} required />
+            </div>
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-source">Source</label>
+            <input id="candidate-source" value={form.source} onChange={event => updateField('source', event.target.value)} placeholder="OSM, council site, Google Maps, Reddit..." required />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-source-url">Source link</label>
+            <input id="candidate-source-url" type="url" value={form.sourceUrl} onChange={event => updateField('sourceUrl', event.target.value)} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-evidence">Evidence</label>
+            <textarea id="candidate-evidence" value={form.evidence} onChange={event => updateField('evidence', event.target.value)} required />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-equipment">Guessed equipment</label>
+            <input id="candidate-equipment" value={form.equipmentGuess} onChange={event => updateField('equipmentGuess', event.target.value)} placeholder="Pull-up bars, dip bars, rings" />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-photo">Photo URL</label>
+            <input id="candidate-photo" type="url" value={form.photoUrl} onChange={event => updateField('photoUrl', event.target.value)} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-attribution">Attribution</label>
+            <input id="candidate-attribution" value={form.attribution} onChange={event => updateField('attribution', event.target.value)} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-confidence">Confidence score</label>
+            <input id="candidate-confidence" type="number" min="0" max="100" step="1" value={form.confidenceScore} onChange={event => updateField('confidenceScore', event.target.value)} required />
+          </div>
+          <p className="admin-legal-note">Do not upload or copy copyrighted images. Store only a source photo URL, source link, and attribution until permission is clear.</p>
+          {message && <p className="auth-message">{message}</p>}
+          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Adding...' : 'Add to Queue'}</button>
+        </form>
+
+        <section className="admin-candidate-list" aria-label="Pending discovery candidates">
+          <div className="admin-section-head">
+            <span className="page-kicker">Review Queue</span>
+            <h2>Pending candidates</h2>
+          </div>
+          {candidates.length === 0 ? (
+            <div className="premium-empty compact">
+              <b>No pending candidates</b>
+              <span>Add a manual finding to start the review queue.</span>
+            </div>
+          ) : (
+            candidates.map(candidate => (
+              <article className="admin-candidate-card" key={candidate.id}>
+                <div className="admin-candidate-main">
+                  <div>
+                    <span className="candidate-source">{candidate.source}</span>
+                    <h3>{candidate.name}</h3>
+                    <p>{candidate.area}</p>
+                  </div>
+                  <div className="confidence-badge">{candidate.confidenceScore}%</div>
+                </div>
+                <div className="candidate-detail-grid">
+                  <div><span>Coordinates</span><b>{candidate.lat.toFixed(5)}, {candidate.lng.toFixed(5)}</b></div>
+                  <div><span>Status</span><b>{candidate.status}</b></div>
+                  <div className="wide"><span>Evidence</span><p>{candidate.evidence}</p></div>
+                  <div className="wide"><span>Equipment guess</span><p>{candidate.equipmentGuess.length ? candidate.equipmentGuess.join(', ') : 'No equipment guess'}</p></div>
+                  {candidate.sourceUrl && (
+                    <div className="wide"><span>Source link</span><a href={candidate.sourceUrl} target="_blank" rel="noreferrer">{candidate.sourceUrl}</a></div>
+                  )}
+                  {candidate.photoUrl && (
+                    <div className="wide"><span>Photo</span><a href={candidate.photoUrl} target="_blank" rel="noreferrer">{candidate.photoUrl}</a></div>
+                  )}
+                  {candidate.attribution && <div className="wide"><span>Attribution</span><p>{candidate.attribution}</p></div>}
+                </div>
+                <p className="admin-legal-note">Check permission and attribution before using any photo publicly.</p>
+                <div className="admin-review-actions">
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    disabled={busyCandidateId === candidate.id}
+                    onClick={() => reviewCandidate(candidate, 'approved')}
+                  >
+                    {busyCandidateId === candidate.id ? 'Reviewing...' : 'Approve'}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={busyCandidateId === candidate.id}
+                    onClick={() => reviewCandidate(candidate, 'rejected')}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </section>
+      </section>
+    </main>
+  );
+}

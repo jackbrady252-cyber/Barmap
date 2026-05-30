@@ -1,8 +1,11 @@
 'use client';
 
 import type { User } from '@supabase/supabase-js';
+import type { FormEvent } from 'react';
 import { useState } from 'react';
+import { CloseIcon } from '@/components/icons';
 import PostCard from '@/components/PostCard';
+import type { MissionSubmission, WorkoutLog } from '@/types/activity';
 import type { AuthMode, UserProfile } from '@/types/auth';
 import type { SocialPost } from '@/types/social';
 
@@ -13,9 +16,12 @@ type ProfilePageProps = {
   posts: SocialPost[];
   savedPosts: SocialPost[];
   savedPostIds: Set<string>;
+  workoutLogs: WorkoutLog[];
+  missionSubmissions: MissionSubmission[];
   onCreatePost: () => void;
   onEditProfile: () => void;
   onToggleSave: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
+  onLogWorkout: (log: Omit<WorkoutLog, 'id' | 'createdAt'>) => void;
   onAuthOpen: (mode: AuthMode) => void;
   onSignOut: () => void;
 };
@@ -40,13 +46,22 @@ export default function ProfilePage({
   posts,
   savedPosts,
   savedPostIds,
+  workoutLogs,
+  missionSubmissions,
   onCreatePost,
   onEditProfile,
   onToggleSave,
+  onLogWorkout,
   onAuthOpen,
   onSignOut
 }: ProfilePageProps) {
   const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'stats' | 'saved'>('posts');
+  const [logOpen, setLogOpen] = useState(false);
+  const [workoutType, setWorkoutType] = useState('');
+  const [exercise, setExercise] = useState('');
+  const [setsRepsTimeDistance, setSetsRepsTimeDistance] = useState('');
+  const [location, setLocation] = useState('');
+  const [notes, setNotes] = useState('');
 
   if (loading) {
     return (
@@ -85,6 +100,25 @@ export default function ProfilePage({
   const username = profile?.username ? `@${profile.username}` : user.email || '';
   const homeCity = profile?.homeCity || 'Ireland';
   const postTiles = posts.slice(0, 12);
+  const pendingSubmissions = missionSubmissions.filter(submission => submission.verificationStatus === 'pending');
+  const approvedSubmissions = missionSubmissions.filter(submission => submission.verificationStatus === 'approved');
+
+  function submitWorkout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onLogWorkout({
+      workoutType: workoutType.trim(),
+      exercise: exercise.trim(),
+      setsRepsTimeDistance: setsRepsTimeDistance.trim(),
+      location: location.trim(),
+      notes: notes.trim()
+    });
+    setWorkoutType('');
+    setExercise('');
+    setSetsRepsTimeDistance('');
+    setLocation('');
+    setNotes('');
+    setLogOpen(false);
+  }
 
   return (
     <main className="app-main app-page profile-page">
@@ -107,7 +141,7 @@ export default function ProfilePage({
           <span>Posts</span>
         </div>
         <div>
-          <b>0</b>
+          <b>{approvedSubmissions.length}</b>
           <span>Missions</span>
         </div>
         <div>
@@ -115,12 +149,13 @@ export default function ProfilePage({
           <span>Sessions</span>
         </div>
         <div>
-          <b>0</b>
-          <span>Spots</span>
+          <b>{savedPosts.length}</b>
+          <span>Saved</span>
         </div>
       </section>
 
       <div className="profile-actions">
+        <button className="btn btn-primary" type="button" onClick={() => setLogOpen(true)}>Log Workout</button>
         <button className="btn btn-primary" type="button" onClick={onEditProfile}>Edit Profile</button>
         <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
       </div>
@@ -166,11 +201,70 @@ export default function ProfilePage({
         )}
 
         {activeProfileTab === 'stats' && (
-          <div className="profile-stats-list">
-            <div><span>Training streak</span><b>0 days</b></div>
-            <div><span>Missions completed</span><b>0</b></div>
-            <div><span>Sessions hosted</span><b>0</b></div>
-            <div><span>Member since</span><b>{profile?.createdAt ? new Date(profile.createdAt).getFullYear() : 'New'}</b></div>
+          <div className="profile-stats-stack">
+            <section className="profile-stat-section">
+              <div className="profile-section-head">
+                <h3>Training Log</h3>
+                <button className="btn btn-primary" type="button" onClick={() => setLogOpen(true)}>Log Workout</button>
+              </div>
+              {workoutLogs.length > 0 ? workoutLogs.slice(0, 4).map(log => (
+                <article className="training-log-card" key={log.id}>
+                  <b>{log.workoutType} · {log.exercise}</b>
+                  <span>{log.setsRepsTimeDistance}</span>
+                  <p>{log.location || 'No location'} · {new Date(log.createdAt).toLocaleDateString()}</p>
+                  {log.notes && <p>{log.notes}</p>}
+                </article>
+              )) : (
+                <div className="premium-empty compact">
+                  <b>No workouts logged</b>
+                  <span>Log a session to build your training history.</span>
+                </div>
+              )}
+            </section>
+
+            <section className="profile-stat-section">
+              <h3>Personal Records</h3>
+              <div className="profile-stats-list">
+                <div><span>Best pull-up result</span><b>{workoutLogs[0]?.setsRepsTimeDistance || 'Not logged'}</b></div>
+                <div><span>Most recent exercise</span><b>{workoutLogs[0]?.exercise || 'Not logged'}</b></div>
+              </div>
+            </section>
+
+            <section className="profile-stat-section">
+              <h3>Missions Completed</h3>
+              <div className="profile-stats-list">
+                <div><span>Approved submissions</span><b>{approvedSubmissions.length}</b></div>
+                <div><span>Pending verification</span><b>{pendingSubmissions.length}</b></div>
+              </div>
+              {pendingSubmissions.length > 0 && (
+                <div className="pending-list">
+                  {pendingSubmissions.map(submission => (
+                    <article className="compact-card" key={submission.id}>
+                      <div>
+                        <h3>{submission.missionTitle}</h3>
+                        <p>{submission.result} · {submission.videoProofName}</p>
+                      </div>
+                      <div className="score-pill">Pending Review</div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="profile-stat-section">
+              <h3>Saved Spots</h3>
+              <div className="profile-stats-list">
+                <div><span>Saved posts/spots</span><b>{savedPosts.length}</b></div>
+              </div>
+            </section>
+
+            <section className="profile-stat-section">
+              <h3>Sessions Attended</h3>
+              <div className="profile-stats-list">
+                <div><span>Tracked sessions</span><b>0</b></div>
+                <div><span>Member since</span><b>{profile?.createdAt ? new Date(profile.createdAt).getFullYear() : 'New'}</b></div>
+              </div>
+            </section>
           </div>
         )}
 
@@ -194,6 +288,47 @@ export default function ProfilePage({
           )
         )}
       </section>
+      {logOpen && (
+        <div className="modal-bg open" onClick={event => {
+          if (event.target === event.currentTarget) setLogOpen(false);
+        }}>
+          <form className="modal auth-modal" onSubmit={submitWorkout}>
+            <button className="panel-close" type="button" aria-label="Close workout log" onClick={() => setLogOpen(false)}>
+              <CloseIcon />
+            </button>
+            <div className="modal-head">
+              <h3>Log Workout</h3>
+              <div className="handle">Add a real training entry to your profile</div>
+            </div>
+            <div className="auth-body modal-body">
+              <div className="form-field">
+                <label htmlFor="workout-type">Workout type</label>
+                <input id="workout-type" value={workoutType} onChange={event => setWorkoutType(event.target.value)} placeholder="Strength, skill, endurance..." required />
+              </div>
+              <div className="form-field">
+                <label htmlFor="workout-exercise">Exercise</label>
+                <input id="workout-exercise" value={exercise} onChange={event => setExercise(event.target.value)} placeholder="Pull-ups, dips, run..." required />
+              </div>
+              <div className="form-field">
+                <label htmlFor="workout-result">Sets / reps / time / distance</label>
+                <input id="workout-result" value={setsRepsTimeDistance} onChange={event => setSetsRepsTimeDistance(event.target.value)} placeholder="5x8, 20 reps, 25 min, 3 km..." required />
+              </div>
+              <div className="form-field">
+                <label htmlFor="workout-location">Location</label>
+                <input id="workout-location" value={location} onChange={event => setLocation(event.target.value)} placeholder="Park or city" />
+              </div>
+              <div className="form-field">
+                <label htmlFor="workout-notes">Notes</label>
+                <textarea id="workout-notes" value={notes} onChange={event => setNotes(event.target.value)} />
+              </div>
+              <div className="auth-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setLogOpen(false)}>Cancel</button>
+                <button className="btn btn-primary" type="submit">Save Workout</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

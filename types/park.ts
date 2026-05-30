@@ -1,4 +1,4 @@
-export type ParkSource = 'osm' | 'ci' | 'hidden' | 'cm' | 'kn';
+export type ParkSource = 'osm' | 'ci' | 'hidden' | 'cm' | 'kn' | 'discovery';
 
 export type ParkSeed = {
   id: number;

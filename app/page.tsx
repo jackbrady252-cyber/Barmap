@@ -18,11 +18,13 @@ import SubmitSpotModal from '@/components/SubmitSpotModal';
 import { verifiedParks } from '@/data/parks';
 import { getSeededFeedPosts } from '@/data/socialFeed';
 import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
+import { fetchApprovedDiscoveryParks } from '@/lib/discovery';
 import { fetchPosts } from '@/lib/posts';
 import { fetchSavedPostIds, savePostForUser, unsavePostForUser } from '@/lib/savedPosts';
 import { hydrateParks } from '@/lib/social';
 import { supabase } from '@/lib/supabase';
 import type { AuthMode, UserProfile } from '@/types/auth';
+import type { MissionSubmission, WorkoutLog } from '@/types/activity';
 import type { Park } from '@/types/park';
 import type { SocialPost } from '@/types/social';
 
@@ -46,6 +48,8 @@ export default function Home() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
   const [pickingSpot, setPickingSpot] = useState(false);
   const [notice, setNotice] = useState('');
@@ -108,6 +112,17 @@ export default function Home() {
     }
   }, [showNotice]);
 
+  const loadApprovedDiscoveryParks = useCallback(async () => {
+    try {
+      const approvedParks = await fetchApprovedDiscoveryParks();
+      if (approvedParks.length === 0) return;
+      setParks(hydrateParks([...verifiedParks, ...approvedParks]));
+    } catch (err) {
+      console.error('[BARMAP discovery] Could not load approved discovery parks', err);
+      showNotice(err instanceof Error ? err.message : 'Approved spot loading failed.');
+    }
+  }, [showNotice]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -145,8 +160,25 @@ export default function Home() {
   }, [loadPosts]);
 
   useEffect(() => {
+    void loadApprovedDiscoveryParks();
+  }, [loadApprovedDiscoveryParks]);
+
+  useEffect(() => {
     void loadSavedPosts(user);
   }, [loadSavedPosts, user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storedLogs = JSON.parse(window.localStorage.getItem('barmap:workout_logs') || '[]');
+      const storedSubmissions = JSON.parse(window.localStorage.getItem('barmap:mission_submissions') || '[]');
+      if (Array.isArray(storedLogs)) setWorkoutLogs(storedLogs);
+      if (Array.isArray(storedSubmissions)) setMissionSubmissions(storedSubmissions);
+    } catch {
+      setWorkoutLogs([]);
+      setMissionSubmissions([]);
+    }
+  }, []);
 
   function openAuth(mode: AuthMode) {
     setAuthMode(mode);
@@ -240,6 +272,37 @@ export default function Home() {
     );
   }
 
+  function saveWorkoutLog(input: Omit<WorkoutLog, 'id' | 'createdAt'>) {
+    const nextLog: WorkoutLog = {
+      ...input,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString()
+    };
+
+    setWorkoutLogs(current => {
+      const next = [nextLog, ...current];
+      window.localStorage.setItem('barmap:workout_logs', JSON.stringify(next));
+      return next;
+    });
+    showNotice('Workout logged.');
+  }
+
+  function submitMission(input: Omit<MissionSubmission, 'id' | 'verificationStatus' | 'createdAt'>) {
+    const submission: MissionSubmission = {
+      ...input,
+      id: crypto.randomUUID(),
+      verificationStatus: 'pending',
+      createdAt: new Date().toISOString()
+    };
+
+    setMissionSubmissions(current => {
+      const next = [submission, ...current];
+      window.localStorage.setItem('barmap:mission_submissions', JSON.stringify(next));
+      return next;
+    });
+    showNotice('Mission submitted for verification.');
+  }
+
   return (
     <div className="app-shell">
       <AppHeader
@@ -262,7 +325,13 @@ export default function Home() {
           onToggleSave={handleToggleSave}
         />
       )}
-      {activeAppTab === 'challenges' && <ChallengesPage parks={parks} />}
+      {activeAppTab === 'challenges' && (
+        <ChallengesPage
+          parks={parks}
+          submissions={missionSubmissions}
+          onSubmitMission={submitMission}
+        />
+      )}
       {activeAppTab === 'events' && <EventsPage parks={parks} />}
       {activeAppTab === 'profile' && (
         <ProfilePage
@@ -272,9 +341,12 @@ export default function Home() {
           posts={posts.filter(post => post.createdBy === user?.id)}
           savedPosts={savedPosts}
           savedPostIds={savedPostIds}
+          workoutLogs={workoutLogs}
+          missionSubmissions={missionSubmissions}
           onCreatePost={() => setCreatePostOpen(true)}
           onEditProfile={() => setEditProfileOpen(true)}
           onToggleSave={handleToggleSave}
+          onLogWorkout={saveWorkoutLog}
           onAuthOpen={openAuth}
           onSignOut={handleSignOut}
         />

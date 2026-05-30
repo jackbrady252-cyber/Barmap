@@ -203,11 +203,6 @@ export default function ParkPanel({
               <ChallengeCard
                 challenge={challenge}
                 key={challenge.name}
-                onSubmit={() => {
-                  const value = window.prompt(`Enter your score for "${challenge.name}":`);
-                  if (!value || Number.isNaN(Number.parseFloat(value))) return;
-                  onSubmitScore(park.id, challenge.name, Number.parseFloat(value));
-                }}
               />
             ))}
             {park.challenges.length === 0 && (
@@ -345,25 +340,17 @@ function MeetupCard({ meetup, going, onToggle }: { meetup: Meetup; going: boolea
   );
 }
 
-function ChallengeCard({ challenge, onSubmit }: { challenge: Challenge; onSubmit: () => void }) {
+function ChallengeCard({ challenge }: { challenge: Challenge }) {
   return (
     <div className="challenge">
       <div className="challenge-head">
         <h4>{challenge.name}</h4>
         <span className="badge">{challenge.unit}</span>
       </div>
-      <div className="leaderboard">
-        {challenge.board.map((row, index) => (
-          <div className={`lb-row r${index + 1}`} key={`${row[0]}-${index}`}>
-            <div className="lb-rank">{index + 1}</div>
-            <div className="lb-name">{row[0]}</div>
-            <div className="lb-score">{row[1]}</div>
-          </div>
-        ))}
+      <div className="panel-empty-state">
+        <b>No verified results yet</b>
+        <span>Submit mission proof from the Missions tab. Approved results will appear on leaderboards.</span>
       </div>
-      <button className="btn btn-ghost" style={{ width: '100%', marginTop: 10, justifyContent: 'center' }} onClick={onSubmit}>
-        Submit your score
-      </button>
     </div>
   );
 }
