@@ -58,6 +58,7 @@ export default function Home() {
   const selectedPark = parks.find(park => park.id === selectedParkId) || null;
   const feedPosts = useMemo(() => [...posts, ...getSeededFeedPosts(parks)], [parks, posts]);
   const savedPosts = useMemo(() => feedPosts.filter(post => savedPostIds.has(post.id)), [feedPosts, savedPostIds]);
+  const userApproved = Boolean(user && profile?.userStatus === 'approved');
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -185,6 +186,26 @@ export default function Home() {
     setAuthModalOpen(true);
   }
 
+  function requireApprovedUser(action = 'use this feature') {
+    if (!user) {
+      openAuth('login');
+      showNotice(`Log in to ${action}.`);
+      return false;
+    }
+
+    if (profile?.userStatus === 'rejected') {
+      showNotice('This account is not approved for BARMAP access.');
+      return false;
+    }
+
+    if (profile?.userStatus !== 'approved') {
+      showNotice('Your account is pending admin approval.');
+      return false;
+    }
+
+    return true;
+  }
+
   async function handleSignOut() {
     try {
       await signOutUser();
@@ -198,11 +219,9 @@ export default function Home() {
   }
 
   async function handleToggleSave(post: SocialPost, nextSaved: boolean) {
-    if (!user) {
-      openAuth('login');
-      showNotice('Log in to save posts.');
-      throw new Error('Log in to save posts.');
-    }
+    if (!requireApprovedUser('save posts')) throw new Error('Approval required.');
+    const currentUser = user;
+    if (!currentUser) throw new Error('Approval required.');
 
     setSavedPostIds(current => {
       const next = new Set(current);
@@ -212,8 +231,8 @@ export default function Home() {
     });
 
     try {
-      if (nextSaved) await savePostForUser(user.id, post.id);
-      else await unsavePostForUser(user.id, post.id);
+      if (nextSaved) await savePostForUser(currentUser.id, post.id);
+      else await unsavePostForUser(currentUser.id, post.id);
     } catch (err) {
       setSavedPostIds(current => {
         const next = new Set(current);
@@ -227,6 +246,8 @@ export default function Home() {
   }
 
   function addPost(parkId: number, text: string) {
+    if (!requireApprovedUser('post at parks')) return;
+
     setParks(current =>
       current.map(park =>
         park.id === parkId
@@ -240,6 +261,8 @@ export default function Home() {
   }
 
   function updateChallengeScore(parkId: number, challengeName: string, score: number) {
+    if (!requireApprovedUser('join missions')) return;
+
     setParks(current =>
       current.map(park => {
         if (park.id !== parkId) return park;
@@ -259,6 +282,8 @@ export default function Home() {
   }
 
   function toggleRsvp(parkId: number, meetupIndex: number, going: boolean) {
+    if (!requireApprovedUser('join sessions')) return;
+
     setParks(current =>
       current.map(park => {
         if (park.id !== parkId) return park;
@@ -273,6 +298,8 @@ export default function Home() {
   }
 
   function saveWorkoutLog(input: Omit<WorkoutLog, 'id' | 'createdAt'>) {
+    if (!requireApprovedUser('log workouts')) return;
+
     const nextLog: WorkoutLog = {
       ...input,
       id: crypto.randomUUID(),
@@ -288,6 +315,8 @@ export default function Home() {
   }
 
   function submitMission(input: Omit<MissionSubmission, 'id' | 'verificationStatus' | 'createdAt'>) {
+    if (!requireApprovedUser('join missions')) return;
+
     const submission: MissionSubmission = {
       ...input,
       id: crypto.randomUUID(),
@@ -310,6 +339,7 @@ export default function Home() {
         profile={profile}
         loggedIn={Boolean(user)}
         onSubmitPark={() => {
+          if (!requireApprovedUser('submit parks')) return;
           setActiveAppTab('map');
           setSelectedParkId(null);
           setPickingSpot(current => !current);
@@ -322,6 +352,8 @@ export default function Home() {
           parks={parks}
           posts={posts}
           savedPostIds={savedPostIds}
+          canInteract={userApproved}
+          onRestrictedAction={() => requireApprovedUser('use feed actions')}
           onToggleSave={handleToggleSave}
         />
       )}
@@ -329,10 +361,18 @@ export default function Home() {
         <ChallengesPage
           parks={parks}
           submissions={missionSubmissions}
+          canInteract={userApproved}
+          onRestrictedAction={() => requireApprovedUser('join missions')}
           onSubmitMission={submitMission}
         />
       )}
-      {activeAppTab === 'events' && <EventsPage parks={parks} />}
+      {activeAppTab === 'events' && (
+        <EventsPage
+          parks={parks}
+          canInteract={userApproved}
+          onRestrictedAction={() => requireApprovedUser('join sessions')}
+        />
+      )}
       {activeAppTab === 'profile' && (
         <ProfilePage
           user={user}
@@ -371,6 +411,8 @@ export default function Home() {
             activeTab={activeParkTab}
             onClose={() => setSelectedParkId(null)}
             onTabChange={setActiveParkTab}
+            canInteract={userApproved}
+            onRestrictedAction={() => requireApprovedUser('use park actions')}
             onAddPost={addPost}
             onSubmitScore={updateChallengeScore}
             onToggleRsvp={toggleRsvp}
@@ -380,6 +422,8 @@ export default function Home() {
 
       <SubmitSpotModal
         pickedLatLng={pickedLatLng}
+        canSubmit={userApproved}
+        onRestrictedAction={() => requireApprovedUser('submit parks')}
         onClose={() => {
           setPickedLatLng(null);
           setPickingSpot(false);
@@ -393,11 +437,7 @@ export default function Home() {
         className="floating-create"
         type="button"
         onClick={() => {
-          if (!user) {
-            openAuth('login');
-            showNotice('Log in to create a post.');
-            return;
-          }
+          if (!requireApprovedUser('create a post')) return;
           setCreatePostOpen(true);
         }}
       >

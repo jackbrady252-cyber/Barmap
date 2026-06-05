@@ -1,3 +1,5 @@
+export type UserStatus = 'pending' | 'approved' | 'rejected';
+
 export type UserProfile = {
   id: string;
   username: string;
@@ -5,6 +7,7 @@ export type UserProfile = {
   avatarUrl: string;
   bio: string;
   homeCity: string;
+  userStatus: UserStatus;
   createdAt: string;
 };
 

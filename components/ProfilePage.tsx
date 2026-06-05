@@ -96,6 +96,28 @@ export default function ProfilePage({
     );
   }
 
+  const userStatus = profile?.userStatus || 'pending';
+
+  if (userStatus !== 'approved') {
+    return (
+      <main className="app-main app-page profile-page">
+        <div className="profile-auth-card">
+          <div className="profile-empty-avatar">{userStatus}</div>
+          <span className="page-kicker">Application</span>
+          <h1>{userStatus === 'rejected' ? 'Access not approved' : 'Waiting for approval'}</h1>
+          <p>
+            {userStatus === 'rejected'
+              ? 'This account is not approved for BARMAP access right now.'
+              : 'Your account application is pending admin review. You can still browse the public map and feed, but posting, saving, commenting, submissions, missions, and sessions are locked until approval.'}
+          </p>
+          <div className="profile-auth-actions">
+            <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const displayName = profile?.displayName || user.email || 'BARMAP Athlete';
   const username = profile?.username ? `@${profile.username}` : user.email || '';
   const homeCity = profile?.homeCity || 'Ireland';
@@ -275,6 +297,7 @@ export default function ProfilePage({
                 <PostCard
                   post={post}
                   saved={savedPostIds.has(post.id)}
+                  canInteract
                   onToggleSave={onToggleSave}
                   key={post.id}
                 />

@@ -9,6 +9,8 @@ type SubmitSpotModalProps = {
     lat: number;
     lng: number;
   } | null;
+  canSubmit: boolean;
+  onRestrictedAction: () => void;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -22,7 +24,7 @@ const initialForm = {
   notes: ''
 };
 
-export default function SubmitSpotModal({ pickedLatLng, onClose, onSaved }: SubmitSpotModalProps) {
+export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedAction, onClose, onSaved }: SubmitSpotModalProps) {
   const [form, setForm] = useState(initialForm);
 
   useEffect(() => {
@@ -36,6 +38,10 @@ export default function SubmitSpotModal({ pickedLatLng, onClose, onSaved }: Subm
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!pickedLatLng) return;
+    if (!canSubmit) {
+      onRestrictedAction();
+      return;
+    }
 
     const equipment = equipmentFromInput(form.equipment);
     if (!form.name.trim() || !form.area.trim() || equipment.length === 0) return;
@@ -143,7 +149,7 @@ export default function SubmitSpotModal({ pickedLatLng, onClose, onSaved }: Subm
               Cancel
             </button>
             <button className="btn btn-primary" type="submit">
-              Save for review
+              {canSubmit ? 'Save for review' : 'Approval required'}
             </button>
           </div>
         </form>

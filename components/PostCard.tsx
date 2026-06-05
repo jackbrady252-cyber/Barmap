@@ -9,10 +9,12 @@ import type { SocialPost } from '@/types/social';
 type PostCardProps = {
   post: SocialPost;
   saved?: boolean;
+  canInteract?: boolean;
+  onRestrictedAction?: () => void;
   onToggleSave?: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
 };
 
-export default function PostCard({ post, saved: savedProp, onToggleSave }: PostCardProps) {
+export default function PostCard({ post, saved: savedProp, canInteract = true, onRestrictedAction, onToggleSave }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(savedProp ?? post.saved);
   const [saving, setSaving] = useState(false);
@@ -46,6 +48,10 @@ export default function PostCard({ post, saved: savedProp, onToggleSave }: PostC
 
   async function toggleSaved() {
     if (saving) return;
+    if (!canInteract) {
+      onRestrictedAction?.();
+      return;
+    }
 
     const next = !saved;
     setSaved(next);
@@ -65,6 +71,13 @@ export default function PostCard({ post, saved: savedProp, onToggleSave }: PostC
   }
 
   function submitComment() {
+    if (!canInteract) {
+      onRestrictedAction?.();
+      setFeedback('Approval required.');
+      window.setTimeout(() => setFeedback(''), 2200);
+      return;
+    }
+
     const text = commentText.trim();
     if (!text) return;
 
@@ -203,7 +216,7 @@ export default function PostCard({ post, saved: savedProp, onToggleSave }: PostC
             <div className="comment-composer" onClick={event => event.stopPropagation()}>
               <input
                 type="text"
-                placeholder="Add a comment..."
+                placeholder={canInteract ? 'Add a comment...' : 'Approval required to comment'}
                 aria-label="Add a comment"
                 value={commentText}
                 onChange={event => setCommentText(event.target.value)}
@@ -214,7 +227,7 @@ export default function PostCard({ post, saved: savedProp, onToggleSave }: PostC
               <button
                 className="btn btn-primary"
                 type="button"
-                disabled={!commentText.trim()}
+                disabled={!canInteract || !commentText.trim()}
                 onMouseDown={event => {
                   event.preventDefault();
                   event.stopPropagation();

@@ -9,10 +9,12 @@ type FeedPageProps = {
   parks: Park[];
   posts: SocialPost[];
   savedPostIds: Set<string>;
+  canInteract: boolean;
+  onRestrictedAction: () => void;
   onToggleSave: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
 };
 
-export default function FeedPage({ parks, posts, savedPostIds, onToggleSave }: FeedPageProps) {
+export default function FeedPage({ parks, posts, savedPostIds, canInteract, onRestrictedAction, onToggleSave }: FeedPageProps) {
   const feedPosts = [...posts, ...getSeededFeedPosts(parks)];
 
   return (
@@ -23,7 +25,14 @@ export default function FeedPage({ parks, posts, savedPostIds, onToggleSave }: F
           <b>Ireland moving today</b>
         </div>
         {feedPosts.map(post => (
-          <PostCard post={post} saved={savedPostIds.has(post.id)} onToggleSave={onToggleSave} key={post.id} />
+          <PostCard
+            post={post}
+            saved={savedPostIds.has(post.id)}
+            canInteract={canInteract}
+            onRestrictedAction={onRestrictedAction}
+            onToggleSave={onToggleSave}
+            key={post.id}
+          />
         ))}
       </section>
     </main>

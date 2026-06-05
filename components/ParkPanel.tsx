@@ -10,6 +10,8 @@ type ParkPanelProps = {
   activeTab: string;
   onClose: () => void;
   onTabChange: (tab: string) => void;
+  canInteract: boolean;
+  onRestrictedAction: () => void;
   onAddPost: (parkId: number, text: string) => void;
   onSubmitScore: (parkId: number, challengeName: string, score: number) => void;
   onToggleRsvp: (parkId: number, meetupIndex: number, going: boolean) => void;
@@ -20,6 +22,8 @@ export default function ParkPanel({
   activeTab,
   onClose,
   onTabChange,
+  canInteract,
+  onRestrictedAction,
   onAddPost,
   onSubmitScore,
   onToggleRsvp
@@ -74,6 +78,11 @@ export default function ParkPanel({
   const osmUrl = `https://www.openstreetmap.org/?mlat=${park.lat}&mlon=${park.lng}#map=19/${park.lat}/${park.lng}`;
 
   function submitPost() {
+    if (!canInteract) {
+      onRestrictedAction();
+      return;
+    }
+
     const text = postText.trim();
     if (!park || !text) return;
     onAddPost(park.id, text);
@@ -170,7 +179,7 @@ export default function ParkPanel({
             <div className="composer">
               <input
                 id="newPostInput"
-                placeholder="Share a workout, ask a question..."
+                placeholder={canInteract ? 'Share a workout, ask a question...' : 'Approval required to post'}
                 value={postText}
                 onChange={event => setPostText(event.target.value)}
                 onKeyDown={event => {
@@ -191,6 +200,10 @@ export default function ParkPanel({
             park={park}
             goingMeetups={goingMeetups}
             onToggle={(index, going) => {
+              if (!canInteract) {
+                onRestrictedAction();
+                return;
+              }
               setGoingMeetups(current => ({ ...current, [index]: going }));
               onToggleRsvp(park.id, index, going);
             }}

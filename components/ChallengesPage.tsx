@@ -18,10 +18,12 @@ type Mission = {
 type ChallengesPageProps = {
   parks: Park[];
   submissions: MissionSubmission[];
+  canInteract: boolean;
+  onRestrictedAction: () => void;
   onSubmitMission: (submission: Omit<MissionSubmission, 'id' | 'verificationStatus' | 'createdAt'>) => void;
 };
 
-export default function ChallengesPage({ parks, submissions, onSubmitMission }: ChallengesPageProps) {
+export default function ChallengesPage({ parks, submissions, canInteract, onRestrictedAction, onSubmitMission }: ChallengesPageProps) {
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [result, setResult] = useState('');
   const [videoProof, setVideoProof] = useState<File | null>(null);
@@ -64,6 +66,11 @@ export default function ChallengesPage({ parks, submissions, onSubmitMission }: 
   const approvedSubmissions = submissions.filter(submission => submission.verificationStatus === 'approved');
 
   function openMission(mission: Mission) {
+    if (!canInteract) {
+      onRestrictedAction();
+      return;
+    }
+
     setActiveMission(mission);
     setResult('');
     setVideoProof(null);
@@ -73,6 +80,10 @@ export default function ChallengesPage({ parks, submissions, onSubmitMission }: 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeMission) return;
+    if (!canInteract) {
+      onRestrictedAction();
+      return;
+    }
     if (!videoProof) {
       setMessage('Video proof is required before a mission can be submitted.');
       return;

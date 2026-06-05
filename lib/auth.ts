@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase, supabaseConfigStatus } from '@/lib/supabase';
-import type { UserProfile } from '@/types/auth';
+import type { UserProfile, UserStatus } from '@/types/auth';
 
 type ProfileRow = {
   id: string;
@@ -9,6 +9,7 @@ type ProfileRow = {
   avatar_url: string | null;
   bio: string | null;
   home_city: string | null;
+  user_status: UserStatus | null;
   created_at: string;
 };
 
@@ -37,6 +38,7 @@ function rowToProfile(row: ProfileRow): UserProfile {
     avatarUrl: row.avatar_url || '',
     bio: row.bio || '',
     homeCity: row.home_city || '',
+    userStatus: row.user_status || 'pending',
     createdAt: row.created_at
   };
 }
@@ -97,7 +99,7 @@ export async function fetchProfile(userId: string): Promise<UserProfile | null> 
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,username,display_name,avatar_url,bio,home_city,created_at')
+    .select('id,username,display_name,avatar_url,bio,home_city,user_status,created_at')
     .eq('id', userId)
     .maybeSingle<ProfileRow>();
 
@@ -118,6 +120,7 @@ export async function ensureProfile(user: User, input?: Partial<SignUpInput>): P
   const username = normalizeUsername(input?.username || metadata.username || usernameFromEmail(user.email));
   const displayName = input?.displayName || metadata.display_name || username;
   const homeCity = input?.homeCity || metadata.home_city || '';
+  const userStatus: UserStatus = user.email?.toLowerCase() === 'jackbrady252@gmail.com' ? 'approved' : 'pending';
 
   const { data, error } = await supabase
     .from('profiles')
@@ -127,9 +130,10 @@ export async function ensureProfile(user: User, input?: Partial<SignUpInput>): P
       display_name: displayName,
       avatar_url: '',
       bio: '',
-      home_city: homeCity
+      home_city: homeCity,
+      user_status: userStatus
     })
-    .select('id,username,display_name,avatar_url,bio,home_city,created_at')
+    .select('id,username,display_name,avatar_url,bio,home_city,user_status,created_at')
     .single<ProfileRow>();
 
   if (error) {
@@ -203,7 +207,7 @@ export async function updateProfile(input: UpdateProfileInput): Promise<UserProf
       home_city: input.homeCity.trim()
     })
     .eq('id', input.id)
-    .select('id,username,display_name,avatar_url,bio,home_city,created_at')
+    .select('id,username,display_name,avatar_url,bio,home_city,user_status,created_at')
     .single<ProfileRow>();
 
   if (error) throw authStageError('Profile update failed', error);

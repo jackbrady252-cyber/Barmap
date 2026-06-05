@@ -4,7 +4,15 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import type { Park } from '@/types/park';
 
-export default function EventsPage({ parks }: { parks: Park[] }) {
+export default function EventsPage({
+  parks,
+  canInteract,
+  onRestrictedAction
+}: {
+  parks: Park[];
+  canInteract: boolean;
+  onRestrictedAction: () => void;
+}) {
   const [joinedSessions, setJoinedSessions] = useState<Record<string, boolean>>({});
   const [hostOpen, setHostOpen] = useState(false);
   const [hostMessage, setHostMessage] = useState('');
@@ -21,6 +29,11 @@ export default function EventsPage({ parks }: { parks: Park[] }) {
 
   function submitHostSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canInteract) {
+      onRestrictedAction();
+      return;
+    }
+
     setHostMessage('Session draft saved locally.');
     window.setTimeout(() => {
       setHostOpen(false);
@@ -36,7 +49,19 @@ export default function EventsPage({ parks }: { parks: Park[] }) {
           <h1>Train with people nearby</h1>
           <p>Sessions are lightweight meetups for bars, mobility, circuits, and local crews. Join one or host a simple training window.</p>
         </div>
-        <button className="btn btn-primary" type="button" onClick={() => setHostOpen(true)}>Host a Session</button>
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={() => {
+            if (!canInteract) {
+              onRestrictedAction();
+              return;
+            }
+            setHostOpen(true);
+          }}
+        >
+          Host a Session
+        </button>
       </section>
       <div className="session-list">
         {sessions.map(({ park, meetup, title, time, host }, index) => (
@@ -54,7 +79,13 @@ export default function EventsPage({ parks }: { parks: Park[] }) {
             <button
               className={joinedSessions[title] ? 'btn btn-primary' : 'btn btn-ghost'}
               type="button"
-              onClick={() => setJoinedSessions(current => ({ ...current, [title]: !current[title] }))}
+              onClick={() => {
+                if (!canInteract) {
+                  onRestrictedAction();
+                  return;
+                }
+                setJoinedSessions(current => ({ ...current, [title]: !current[title] }));
+              }}
             >
               {joinedSessions[title] ? 'Going' : 'Join'}
             </button>

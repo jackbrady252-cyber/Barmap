@@ -796,6 +796,11 @@ button.action { cursor: pointer; }
 .admin-candidate-list {
   display: grid; gap: 12px; padding: 16px;
 }
+.admin-user-list {
+  width: min(100%, 1080px); margin: 0 auto; display: grid; gap: 12px;
+  padding: 16px; border-radius: 18px; background: rgba(20,19,15,.76);
+  border: 1px solid rgba(244,239,227,.07);
+}
 .admin-discovery-form {
   max-height: calc(100dvh - 170px);
   overflow-y: auto;
@@ -814,6 +819,13 @@ button.action { cursor: pointer; }
   color: var(--text-dim);
 }
 .admin-candidate-card { padding: 16px; display: grid; gap: 13px; }
+.admin-user-card {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px;
+  padding: 16px; border-radius: 16px; background: rgba(244,239,227,.035);
+  border: 1px solid rgba(244,239,227,.06);
+}
+.admin-user-card h3 { margin: 5px 0 5px; font-size: 18px; }
+.admin-user-card p { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.45; }
 .admin-candidate-main {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
 }
@@ -910,4 +922,5 @@ button.action { cursor: pointer; }
   .candidate-detail-grid { grid-template-columns: 1fr; }
   .admin-two-col { grid-template-columns: 1fr; }
   .admin-review-actions .btn { flex: 1; justify-content: center; }
+  .admin-user-card { grid-template-columns: 1fr; }
 }

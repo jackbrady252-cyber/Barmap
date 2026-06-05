@@ -15,8 +15,27 @@ create table if not exists public.profiles (
   avatar_url text not null default '',
   bio text not null default '',
   home_city text not null default '',
+  user_status text not null default 'pending',
   created_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists user_status text not null default 'pending';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'profiles_user_status_check'
+      and conrelid = 'public.profiles'::regclass
+  ) then
+    alter table public.profiles
+      add constraint profiles_user_status_check
+      check (user_status in ('pending', 'approved', 'rejected'));
+  end if;
+end;
+$$;
 
 create index if not exists profiles_username_idx
   on public.profiles (username);
@@ -63,14 +82,18 @@ begin
   base_username := lower(regexp_replace(coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1), 'athlete'), '[^a-zA-Z0-9_]+', '_', 'g'));
   base_username := trim(both '_' from base_username);
 
-  insert into public.profiles (id, username, display_name, avatar_url, bio, home_city)
+  insert into public.profiles (id, username, display_name, avatar_url, bio, home_city, user_status)
   values (
     new.id,
     left(coalesce(nullif(base_username, ''), 'athlete'), 15) || '_' || substr(new.id::text, 1, 8),
     coalesce(nullif(new.raw_user_meta_data->>'display_name', ''), split_part(new.email, '@', 1), 'BARMAP Athlete'),
     coalesce(new.raw_user_meta_data->>'avatar_url', ''),
     coalesce(new.raw_user_meta_data->>'bio', ''),
-    coalesce(new.raw_user_meta_data->>'home_city', '')
+    coalesce(new.raw_user_meta_data->>'home_city', ''),
+    case
+      when lower(coalesce(new.email, '')) = 'jackbrady252@gmail.com' then 'approved'
+      else 'pending'
+    end
   )
   on conflict (id) do nothing;
 
@@ -294,6 +317,52 @@ $$;
 
 grant execute on function public.is_admin() to authenticated;
 
+create or replace function public.is_approved_user()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin()
+    or exists (
+      select 1
+      from public.profiles
+      where id = auth.uid()
+        and user_status = 'approved'
+    );
+$$;
+
+grant execute on function public.is_approved_user() to authenticated;
+
+update public.profiles
+set user_status = 'approved'
+where id in (
+  select id
+  from auth.users
+  where lower(email) = 'jackbrady252@gmail.com'
+);
+
+create or replace function public.prevent_non_admin_user_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.user_status is distinct from new.user_status and not public.is_admin() then
+    raise exception 'Only BARMAP admins can change user approval status.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_non_admin_user_status_change on public.profiles;
+create trigger prevent_non_admin_user_status_change
+  before update on public.profiles
+  for each row execute function public.prevent_non_admin_user_status_change();
+
 drop policy if exists "Admins can read admin records" on public.app_admins;
 create policy "Admins can read admin records"
   on public.app_admins
@@ -308,6 +377,199 @@ create policy "Admins can update admin records"
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
+
+-- User approval gates. Pending and rejected users can see their own status,
+-- approved profiles can be read publicly for feed/profile joins, and admins can
+-- review everyone through RPCs without exposing auth emails publicly.
+drop policy if exists "Profiles are publicly readable" on public.profiles;
+create policy "Approved profiles are readable"
+  on public.profiles
+  for select
+  to anon, authenticated
+  using (
+    user_status = 'approved'
+    or auth.uid() = id
+    or public.is_admin()
+  );
+
+drop policy if exists "Users can insert their own profile" on public.profiles;
+create policy "Users can insert their pending profile"
+  on public.profiles
+  for insert
+  to authenticated
+  with check (
+    auth.uid() = id
+    and (
+      user_status = 'pending'
+      or (
+        user_status = 'approved'
+        and lower(coalesce(auth.jwt()->>'email', '')) = 'jackbrady252@gmail.com'
+      )
+    )
+  );
+
+drop policy if exists "Users can update their own profile" on public.profiles;
+create policy "Users can update their own non-status profile fields"
+  on public.profiles
+  for update
+  to authenticated
+  using (auth.uid() = id or public.is_admin())
+  with check (auth.uid() = id or public.is_admin());
+
+drop policy if exists "Anyone can read posts" on public.posts;
+create policy "Anyone can read posts"
+  on public.posts
+  for select
+  to anon, authenticated
+  using (
+    exists (
+      select 1
+      from public.profiles
+      where profiles.id = posts.user_id
+        and profiles.user_status = 'approved'
+    )
+  );
+
+drop policy if exists "Users can create their own posts" on public.posts;
+create policy "Approved users can create their own posts"
+  on public.posts
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id and public.is_approved_user());
+
+drop policy if exists "Users can update their own posts" on public.posts;
+create policy "Approved users can update their own posts"
+  on public.posts
+  for update
+  to authenticated
+  using (auth.uid() = user_id and public.is_approved_user())
+  with check (auth.uid() = user_id and public.is_approved_user());
+
+drop policy if exists "Users can delete their own posts" on public.posts;
+create policy "Approved users can delete their own posts"
+  on public.posts
+  for delete
+  to authenticated
+  using (auth.uid() = user_id and public.is_approved_user());
+
+drop policy if exists "Users can save posts for themselves" on public.saved_posts;
+create policy "Approved users can save posts for themselves"
+  on public.saved_posts
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id and public.is_approved_user());
+
+drop policy if exists "Users can unsave their own posts" on public.saved_posts;
+create policy "Approved users can unsave their own posts"
+  on public.saved_posts
+  for delete
+  to authenticated
+  using (auth.uid() = user_id and public.is_approved_user());
+
+drop policy if exists "Anyone can submit pending spots" on public.submitted_spots;
+create policy "Approved users can submit pending spots"
+  on public.submitted_spots
+  for insert
+  to authenticated
+  with check (status = 'pending' and public.is_approved_user());
+
+drop policy if exists "Users can upload their own post media" on storage.objects;
+create policy "Approved users can upload their own post media"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.is_approved_user()
+  );
+
+drop policy if exists "Users can update their own post media" on storage.objects;
+create policy "Approved users can update their own post media"
+  on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.is_approved_user()
+  )
+  with check (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.is_approved_user()
+  );
+
+drop policy if exists "Users can delete their own post media" on storage.objects;
+create policy "Approved users can delete their own post media"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'post-media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.is_approved_user()
+  );
+
+create or replace function public.list_pending_user_applications()
+returns table (
+  id uuid,
+  email text,
+  username text,
+  display_name text,
+  home_city text,
+  user_status text,
+  created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    profiles.id,
+    auth.users.email,
+    profiles.username,
+    profiles.display_name,
+    profiles.home_city,
+    profiles.user_status,
+    profiles.created_at
+  from public.profiles
+  join auth.users on auth.users.id = profiles.id
+  where public.is_admin()
+    and profiles.user_status = 'pending'
+  order by profiles.created_at asc;
+$$;
+
+grant execute on function public.list_pending_user_applications() to authenticated;
+
+create or replace function public.review_user_application(profile_id uuid, next_status text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only BARMAP admins can review user applications.';
+  end if;
+
+  if next_status not in ('approved', 'rejected') then
+    raise exception 'Invalid user status: %', next_status;
+  end if;
+
+  update public.profiles
+  set user_status = next_status
+  where id = profile_id
+    and user_status = 'pending';
+
+  if not found then
+    raise exception 'Pending user application not found.';
+  end if;
+end;
+$$;
+
+grant execute on function public.review_user_application(uuid, text) to authenticated;
 
 -- Discovery candidates are private internal research records. Nothing here is
 -- publicly readable; approved candidates are copied into public_spots instead.
