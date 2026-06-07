@@ -5,6 +5,8 @@ type DiscoveryCandidateRow = {
   id: string;
   name: string;
   area: string;
+  address: string | null;
+  region: 'ireland' | 'uk' | 'new-york' | null;
   lat: number;
   lng: number;
   source: string;
@@ -25,6 +27,8 @@ type PublicSpotRow = {
   discovery_candidate_id: string;
   name: string;
   area: string;
+  address: string | null;
+  region: 'ireland' | 'uk' | 'new-york' | null;
   lat: number;
   lng: number;
   source: string;
@@ -41,6 +45,8 @@ function rowToCandidate(row: DiscoveryCandidateRow): DiscoveryCandidate {
     id: row.id,
     name: row.name,
     area: row.area,
+    address: row.address || '',
+    region: row.region || 'ireland',
     lat: row.lat,
     lng: row.lng,
     source: row.source,
@@ -63,6 +69,8 @@ function rowToPublicSpot(row: PublicSpotRow, index: number): PublicSpot {
     discoveryCandidateId: row.discovery_candidate_id,
     name: row.name,
     area: row.area,
+    address: row.address || '',
+    region: row.region || 'ireland',
     lat: row.lat,
     lng: row.lng,
     source: 'discovery',
@@ -106,7 +114,7 @@ export async function fetchDiscoveryCandidates(status: 'pending' | 'approved' | 
 
   const { data, error } = await supabase
     .from('discovery_candidates')
-    .select('id,name,area,lat,lng,source,source_url,evidence,equipment_guess,photo_url,attribution,confidence_score,status,created_at,reviewed_at,reviewed_by')
+    .select('id,name,area,address,region,lat,lng,source,source_url,evidence,equipment_guess,photo_url,attribution,confidence_score,status,created_at,reviewed_at,reviewed_by')
     .eq('status', status)
     .order('created_at', { ascending: false });
 
@@ -120,6 +128,8 @@ export async function createDiscoveryCandidate(input: NewDiscoveryCandidate): Pr
   const { error } = await supabase.from('discovery_candidates').insert({
     name: input.name,
     area: input.area,
+    address: input.address,
+    region: input.region,
     lat: input.lat,
     lng: input.lng,
     source: input.source,
@@ -151,7 +161,7 @@ export async function fetchApprovedDiscoveryParks(): Promise<PublicSpot[]> {
 
   const { data, error } = await supabase
     .from('public_spots')
-    .select('id,discovery_candidate_id,name,area,lat,lng,source,source_url,evidence,equipment,photo_url,attribution,created_at')
+    .select('id,discovery_candidate_id,name,area,address,region,lat,lng,source,source_url,evidence,equipment,photo_url,attribution,created_at')
     .order('created_at', { ascending: false });
 
   if (error) {

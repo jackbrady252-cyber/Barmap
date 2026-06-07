@@ -11,12 +11,14 @@ import {
   parseEquipmentGuess,
   reviewDiscoveryCandidate
 } from '@/lib/discovery';
-import { supabaseConfigured, supabaseConfigStatus } from '@/lib/supabase';
-import type { DiscoveryCandidate } from '@/types/discovery';
+import { supabase, supabaseConfigured, supabaseConfigStatus } from '@/lib/supabase';
+import type { DiscoveryCandidate, DiscoveryImportResult, DiscoveryRegion } from '@/types/discovery';
 
 const initialForm = {
   name: '',
   area: '',
+  address: '',
+  region: 'ireland' as DiscoveryRegion,
   lat: '',
   lng: '',
   source: '',
@@ -48,6 +50,9 @@ export default function DiscoveryAdminPage() {
   const [message, setMessage] = useState('');
   const [busyCandidateId, setBusyCandidateId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [importRegion, setImportRegion] = useState<DiscoveryRegion>('uk');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<DiscoveryImportResult | null>(null);
 
   const pendingCount = candidates.length;
   const confidenceValue = useMemo(() => {
@@ -128,6 +133,8 @@ export default function DiscoveryAdminPage() {
       await createDiscoveryCandidate({
         name: form.name.trim(),
         area: form.area.trim(),
+        address: form.address.trim(),
+        region: form.region,
         lat,
         lng,
         source: form.source.trim(),
@@ -145,6 +152,37 @@ export default function DiscoveryAdminPage() {
       setMessage(err instanceof Error ? err.message : 'Candidate creation failed.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function importCandidates() {
+    setMessage('');
+    setImportResult(null);
+
+    try {
+      setImporting(true);
+      const session = await supabase?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      if (!token) throw new Error('Admin session required.');
+
+      const response = await fetch('/api/admin/discovery/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ region: importRegion })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Import failed.');
+
+      setImportResult(data as DiscoveryImportResult);
+      setMessage(`Import complete: added ${data.added}, skipped ${data.skipped}.`);
+      await loadCandidates();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Import failed.');
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -254,6 +292,18 @@ export default function DiscoveryAdminPage() {
             <label htmlFor="candidate-area">Area</label>
             <input id="candidate-area" value={form.area} onChange={event => updateField('area', event.target.value)} required />
           </div>
+          <div className="form-field">
+            <label htmlFor="candidate-address">Address</label>
+            <input id="candidate-address" value={form.address} onChange={event => updateField('address', event.target.value)} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="candidate-region">Region</label>
+            <select id="candidate-region" value={form.region} onChange={event => updateField('region', event.target.value)}>
+              <option value="ireland">Ireland</option>
+              <option value="uk">UK</option>
+              <option value="new-york">New York</option>
+            </select>
+          </div>
           <div className="admin-two-col">
             <div className="form-field">
               <label htmlFor="candidate-lat">Latitude</label>
@@ -298,6 +348,33 @@ export default function DiscoveryAdminPage() {
         </form>
 
         <section className="admin-candidate-list" aria-label="Pending discovery candidates">
+          <div className="admin-import-panel">
+            <div className="admin-section-head">
+              <span className="page-kicker">Importer</span>
+              <h2>Search OpenStreetMap</h2>
+            </div>
+            <div className="admin-import-controls">
+              <div className="form-field">
+                <label htmlFor="import-region">Region</label>
+                <select id="import-region" value={importRegion} onChange={event => setImportRegion(event.target.value as DiscoveryRegion)}>
+                  <option value="uk">UK</option>
+                  <option value="new-york">New York</option>
+                </select>
+              </div>
+              <button className="btn btn-primary" type="button" disabled={importing} onClick={importCandidates}>
+                {importing ? 'Searching...' : 'Search candidates'}
+              </button>
+            </div>
+            <p className="admin-legal-note">Imports create pending review candidates only. They never publish to the public map automatically.</p>
+            {importResult && (
+              <div className="candidate-detail-grid">
+                <div><span>Searched</span><b>{importResult.searched}</b></div>
+                <div><span>Added</span><b>{importResult.added}</b></div>
+                <div><span>Skipped</span><b>{importResult.skipped}</b></div>
+                <div><span>Google enriched</span><b>{importResult.googleEnriched}</b></div>
+              </div>
+            )}
+          </div>
           <div className="admin-section-head">
             <span className="page-kicker">Review Queue</span>
             <h2>Pending candidates</h2>
@@ -314,13 +391,14 @@ export default function DiscoveryAdminPage() {
                   <div>
                     <span className="candidate-source">{candidate.source}</span>
                     <h3>{candidate.name}</h3>
-                    <p>{candidate.area}</p>
+                    <p>{candidate.area} · {candidate.region}</p>
                   </div>
                   <div className="confidence-badge">{candidate.confidenceScore}%</div>
                 </div>
                 <div className="candidate-detail-grid">
                   <div><span>Coordinates</span><b>{candidate.lat.toFixed(5)}, {candidate.lng.toFixed(5)}</b></div>
                   <div><span>Status</span><b>{candidate.status}</b></div>
+                  {candidate.address && <div className="wide"><span>Address</span><p>{candidate.address}</p></div>}
                   <div className="wide"><span>Evidence</span><p>{candidate.evidence}</p></div>
                   <div className="wide"><span>Equipment guess</span><p>{candidate.equipmentGuess.length ? candidate.equipmentGuess.join(', ') : 'No equipment guess'}</p></div>
                   {candidate.sourceUrl && (

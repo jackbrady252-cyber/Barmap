@@ -592,8 +592,32 @@ create table if not exists public.discovery_candidates (
   reviewed_by uuid references auth.users(id)
 );
 
+alter table public.discovery_candidates
+  add column if not exists address text not null default '';
+
+alter table public.discovery_candidates
+  add column if not exists region text not null default 'ireland';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'discovery_candidates_region_check'
+      and conrelid = 'public.discovery_candidates'::regclass
+  ) then
+    alter table public.discovery_candidates
+      add constraint discovery_candidates_region_check
+      check (region in ('ireland', 'uk', 'new-york'));
+  end if;
+end;
+$$;
+
 create index if not exists discovery_candidates_status_created_at_idx
   on public.discovery_candidates (status, created_at desc);
+
+create index if not exists discovery_candidates_region_status_idx
+  on public.discovery_candidates (region, status, created_at desc);
 
 create index if not exists discovery_candidates_location_idx
   on public.discovery_candidates (lat, lng);
@@ -629,6 +653,8 @@ create table if not exists public.public_spots (
   discovery_candidate_id uuid not null unique references public.discovery_candidates(id) on delete restrict,
   name text not null,
   area text not null,
+  address text not null default '',
+  region text not null default 'ireland',
   lat double precision not null,
   lng double precision not null,
   source text not null,
@@ -639,6 +665,27 @@ create table if not exists public.public_spots (
   attribution text not null default '',
   created_at timestamptz not null default now()
 );
+
+alter table public.public_spots
+  add column if not exists address text not null default '';
+
+alter table public.public_spots
+  add column if not exists region text not null default 'ireland';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'public_spots_region_check'
+      and conrelid = 'public.public_spots'::regclass
+  ) then
+    alter table public.public_spots
+      add constraint public_spots_region_check
+      check (region in ('ireland', 'uk', 'new-york'));
+  end if;
+end;
+$$;
 
 create index if not exists public_spots_created_at_idx
   on public.public_spots (created_at desc);
@@ -708,6 +755,8 @@ begin
       discovery_candidate_id,
       name,
       area,
+      address,
+      region,
       lat,
       lng,
       source,
@@ -721,6 +770,8 @@ begin
       candidate.id,
       candidate.name,
       candidate.area,
+      candidate.address,
+      candidate.region,
       candidate.lat,
       candidate.lng,
       candidate.source,
@@ -733,6 +784,8 @@ begin
     on conflict (discovery_candidate_id) do update
     set name = excluded.name,
         area = excluded.area,
+        address = excluded.address,
+        region = excluded.region,
         lat = excluded.lat,
         lng = excluded.lng,
         source = excluded.source,

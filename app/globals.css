@@ -796,6 +796,13 @@ button.action { cursor: pointer; }
 .admin-candidate-list {
   display: grid; gap: 12px; padding: 16px;
 }
+.admin-import-panel {
+  display: grid; gap: 12px; padding: 14px; border-radius: 16px;
+  background: rgba(244,239,227,.035); border: 1px solid rgba(244,239,227,.06);
+}
+.admin-import-controls {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end;
+}
 .admin-user-list {
   width: min(100%, 1080px); margin: 0 auto; display: grid; gap: 12px;
   padding: 16px; border-radius: 18px; background: rgba(20,19,15,.76);
@@ -919,6 +926,7 @@ button.action { cursor: pointer; }
     max-height: min(72dvh, 680px);
     padding-bottom: max(26px, calc(18px + env(safe-area-inset-bottom)));
   }
+  .admin-import-controls { grid-template-columns: 1fr; }
   .candidate-detail-grid { grid-template-columns: 1fr; }
   .admin-two-col { grid-template-columns: 1fr; }
   .admin-review-actions .btn { flex: 1; justify-content: center; }
