@@ -73,6 +73,7 @@ export default function ParkPanel({
   }
 
   const gallery = (park.gallery || []).filter(Boolean);
+  const locationText = park.address ? `${park.area} · ${park.address}` : park.area;
   const gmapsDir = `https://www.google.com/maps/dir/?api=1&destination=${park.lat},${park.lng}`;
   const gmapsView = `https://www.google.com/maps/search/?api=1&query=${park.lat},${park.lng}`;
   const osmUrl = `https://www.openstreetmap.org/?mlat=${park.lat}&mlon=${park.lng}#map=19/${park.lat}/${park.lng}`;
@@ -139,7 +140,7 @@ export default function ParkPanel({
         <h2 id="parkName">{park.name}</h2>
         <div className="loc">
           <PinIcon small />
-          <span id="parkLoc">{park.area}</span>
+          <span id="parkLoc">{locationText}</span>
         </div>
       </div>
 

@@ -4,6 +4,8 @@ export type ParkSeed = {
   id: number;
   name: string;
   area: string;
+  address?: string;
+  region?: string;
   lat: number;
   lng: number;
   source: ParkSource;

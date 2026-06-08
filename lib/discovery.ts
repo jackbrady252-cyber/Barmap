@@ -64,8 +64,10 @@ function rowToCandidate(row: DiscoveryCandidateRow): DiscoveryCandidate {
 }
 
 function rowToPublicSpot(row: PublicSpotRow, index: number): PublicSpot {
+  const numericId = Number.parseInt(row.id.replace(/-/g, '').slice(0, 10), 16);
+
   return {
-    id: -100000 - index - Math.abs(row.id.split('').reduce((total, char) => total + char.charCodeAt(0), 0)),
+    id: -Math.abs(Number.isFinite(numericId) ? numericId : 100000 + index),
     discoveryCandidateId: row.discovery_candidate_id,
     name: row.name,
     area: row.area,

@@ -48,6 +48,8 @@ export default function Home() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const [publicSpotLoading, setPublicSpotLoading] = useState(true);
+  const [publicSpotCount, setPublicSpotCount] = useState(0);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
@@ -114,13 +116,16 @@ export default function Home() {
   }, [showNotice]);
 
   const loadApprovedDiscoveryParks = useCallback(async () => {
+    setPublicSpotLoading(true);
     try {
       const approvedParks = await fetchApprovedDiscoveryParks();
-      if (approvedParks.length === 0) return;
+      setPublicSpotCount(approvedParks.length);
       setParks(hydrateParks([...verifiedParks, ...approvedParks]));
     } catch (err) {
       console.error('[BARMAP discovery] Could not load approved discovery parks', err);
       showNotice(err instanceof Error ? err.message : 'Approved spot loading failed.');
+    } finally {
+      setPublicSpotLoading(false);
     }
   }, [showNotice]);
 
@@ -162,6 +167,28 @@ export default function Home() {
 
   useEffect(() => {
     void loadApprovedDiscoveryParks();
+  }, [loadApprovedDiscoveryParks]);
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+    const client = supabase;
+
+    const channel = client
+      .channel('public-spots-map-refresh')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'public_spots' }, () => {
+        void loadApprovedDiscoveryParks();
+      })
+      .subscribe();
+
+    function refreshOnFocus() {
+      void loadApprovedDiscoveryParks();
+    }
+
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus);
+      void client.removeChannel(channel);
+    };
   }, [loadApprovedDiscoveryParks]);
 
   useEffect(() => {
@@ -397,6 +424,8 @@ export default function Home() {
             parks={parks}
             selectedPark={selectedPark}
             notice={notice}
+            publicSpotLoading={publicSpotLoading}
+            publicSpotCount={publicSpotCount}
             pickingSpot={pickingSpot}
             onNotice={showNotice}
             onPickingSpotChange={setPickingSpot}

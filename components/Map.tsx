@@ -16,6 +16,8 @@ type MapProps = {
   parks: Park[];
   selectedPark: Park | null;
   notice: string;
+  publicSpotLoading: boolean;
+  publicSpotCount: number;
   pickingSpot: boolean;
   onNotice: (message: string) => void;
   onPickingSpotChange: (picking: boolean) => void;
@@ -50,6 +52,8 @@ export default function Map({
   parks,
   selectedPark,
   notice,
+  publicSpotLoading,
+  publicSpotCount,
   pickingSpot,
   onNotice,
   onPickingSpotChange,
@@ -167,7 +171,7 @@ export default function Map({
       });
       L.marker([park.lat, park.lng], { icon })
         .addTo(markerLayer)
-        .bindTooltip(`<b>${escapeHtml(park.name)}</b><br><span style="color:#888">${escapeHtml(park.area)}</span>`, {
+        .bindTooltip(`<b>${escapeHtml(park.name)}</b><br><span style="color:#888">${escapeHtml(park.address || park.area)}</span>`, {
           direction: 'top',
           offset: [0, -32]
         })
@@ -228,7 +232,11 @@ export default function Map({
   function focusSearchMatch(openPanel = false, query = search) {
     const q = query.toLowerCase().trim();
     if (!q) return;
-    const match = parks.find(park => park.name.toLowerCase().includes(q) || park.area.toLowerCase().includes(q));
+    const match = parks.find(park =>
+      park.name.toLowerCase().includes(q) ||
+      park.area.toLowerCase().includes(q) ||
+      (park.address || '').toLowerCase().includes(q)
+    );
     if (!match) return;
 
     mapRef.current?.flyTo([match.lat, match.lng], openPanel ? 17 : 14);
@@ -284,12 +292,12 @@ export default function Map({
         <span className="num" id="visibleCount">
           {parks.length}
         </span>{' '}
-        verified parks tracked
+        verified parks tracked{publicSpotCount > 0 ? `, ${publicSpotCount} approved from review` : ''}
       </div>
 
-      <div id="loadingMsg" style={{ display: 'none' }}>
+      <div id="loadingMsg" style={{ display: publicSpotLoading ? 'block' : 'none' }}>
         <span className="spinner" />
-        Loading map...
+        Loading approved spots...
       </div>
       <div id="errorMsg" style={{ display: notice ? 'block' : 'none' }}>
         {notice}
