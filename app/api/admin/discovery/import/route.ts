@@ -74,38 +74,19 @@ function getSupabaseForRequest(request: NextRequest) {
 function overpassQuery(region: ImportRegion) {
   const [south, west, north, east] = regionConfig[region].bbox;
   const bbox = `${south},${west},${north},${east}`;
-  const keywordRegex = 'outdoor[_ -]?gym|street[_ -]?workout|calisthenics|fitness station|pull.?up|pull up bars|pull-up bars';
 
   return `
-    [out:json][timeout:35];
-    (
-      node["leisure"="fitness_station"](${bbox});
-      way["leisure"="fitness_station"](${bbox});
-      relation["leisure"="fitness_station"](${bbox});
-      node["sport"="calisthenics"](${bbox});
-      way["sport"="calisthenics"](${bbox});
-      relation["sport"="calisthenics"](${bbox});
-      node["sport"="fitness"](${bbox});
-      way["sport"="fitness"](${bbox});
-      relation["sport"="fitness"](${bbox});
-      node["fitness_station"](${bbox});
-      way["fitness_station"](${bbox});
-      relation["fitness_station"](${bbox});
-      node["fitness_station"~"${keywordRegex}",i](${bbox});
-      way["fitness_station"~"${keywordRegex}",i](${bbox});
-      relation["fitness_station"~"${keywordRegex}",i](${bbox});
-      node["outdoor_gym"](${bbox});
-      way["outdoor_gym"](${bbox});
-      relation["outdoor_gym"](${bbox});
-      node["name"~"${keywordRegex}",i](${bbox});
-      way["name"~"${keywordRegex}",i](${bbox});
-      relation["name"~"${keywordRegex}",i](${bbox});
-      node["description"~"${keywordRegex}",i](${bbox});
-      way["description"~"${keywordRegex}",i](${bbox});
-      relation["description"~"${keywordRegex}",i](${bbox});
-    );
-    out tags center;
-  `;
+[out:json][timeout:60];
+(
+  node["leisure"="fitness_station"](${bbox});
+  way["leisure"="fitness_station"](${bbox});
+  relation["leisure"="fitness_station"](${bbox});
+  node["sport"="calisthenics"](${bbox});
+  way["sport"="calisthenics"](${bbox});
+  relation["sport"="calisthenics"](${bbox});
+);
+out tags center;
+`.trim();
 }
 
 function sourceUrl(element: OverpassElement) {
@@ -271,16 +252,28 @@ export async function POST(request: NextRequest) {
   if (!region || !importRegions.includes(region as ImportRegion)) return NextResponse.json({ error: 'Region must be london or new-york.' }, { status: 400 });
   const importRegion = region as ImportRegion;
 
+  const query = overpassQuery(importRegion);
+  const overpassBody = new URLSearchParams({ data: query });
   const overpassResponse = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ data: overpassQuery(importRegion) })
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'BarMap/1.0 contact: jackbrady252@gmail.com'
+    },
+    body: overpassBody
   });
+  const overpassText = await overpassResponse.text();
   if (!overpassResponse.ok) {
-    return NextResponse.json({ error: `Overpass failed with ${overpassResponse.status}.` }, { status: 502 });
+    const detail = overpassText.trim().slice(0, 800);
+    return NextResponse.json({ error: `Overpass failed with ${overpassResponse.status}: ${detail || 'No response body.'}` }, { status: 502 });
   }
 
-  const overpassData = await overpassResponse.json() as { elements?: OverpassElement[] };
+  let overpassData: { elements?: OverpassElement[] };
+  try {
+    overpassData = JSON.parse(overpassText) as { elements?: OverpassElement[] };
+  } catch {
+    return NextResponse.json({ error: `Overpass returned invalid JSON: ${overpassText.trim().slice(0, 800) || 'No response body.'}` }, { status: 502 });
+  }
   const elements = overpassData.elements || [];
 
   const [{ data: existingCandidates }, { data: existingSpots }] = await Promise.all([
