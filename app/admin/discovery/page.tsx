@@ -52,6 +52,7 @@ export default function DiscoveryAdminPage() {
   const [saving, setSaving] = useState(false);
   const [importRegion, setImportRegion] = useState<DiscoveryRegion>('london');
   const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
   const [importResult, setImportResult] = useState<DiscoveryImportResult | null>(null);
 
   const pendingCount = candidates.length;
@@ -157,6 +158,7 @@ export default function DiscoveryAdminPage() {
 
   async function importCandidates() {
     setMessage('');
+    setImportMessage('Searching OpenStreetMap...');
     setImportResult(null);
 
     try {
@@ -165,6 +167,7 @@ export default function DiscoveryAdminPage() {
       const token = session?.data.session?.access_token;
       if (!token) throw new Error('Admin session required.');
 
+      console.info('[BARMAP discovery] Starting importer', { region: importRegion });
       const response = await fetch('/api/admin/discovery/import', {
         method: 'POST',
         headers: {
@@ -173,14 +176,22 @@ export default function DiscoveryAdminPage() {
         },
         body: JSON.stringify({ region: importRegion })
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Import failed.');
+      const data = await response.json().catch(error => {
+        console.error('[BARMAP discovery] Import response was not valid JSON', error);
+        return {};
+      }) as Partial<DiscoveryImportResult> & { error?: string };
+      if (!response.ok) throw new Error(data.error || `Import failed with ${response.status}.`);
+      if (typeof data.added !== 'number' || typeof data.skipped !== 'number') {
+        console.error('[BARMAP discovery] Import response missing counts', data);
+        throw new Error('Import completed but returned an unexpected response.');
+      }
 
       setImportResult(data as DiscoveryImportResult);
-      setMessage(`Added ${data.added} candidates, skipped ${data.skipped} duplicates.`);
+      setImportMessage(`Added ${data.added} candidates, skipped ${data.skipped} duplicates.`);
       await loadCandidates();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Import failed.');
+      console.error('[BARMAP discovery] Import failed', err);
+      setImportMessage(err instanceof Error ? err.message : 'Import failed.');
     } finally {
       setImporting(false);
     }
@@ -361,11 +372,12 @@ export default function DiscoveryAdminPage() {
                   <option value="new-york">New York</option>
                 </select>
               </div>
-              <button className="btn btn-primary" type="button" disabled={importing} onClick={importCandidates}>
-                {importing ? 'Searching...' : 'Search candidates'}
+              <button className="btn btn-primary" type="button" disabled={importing} onClick={() => void importCandidates()}>
+                {importing ? 'Searching OpenStreetMap...' : 'Search candidates'}
               </button>
             </div>
             <p className="admin-legal-note">Imports create pending review candidates only. They never publish to the public map automatically.</p>
+            {importMessage && <p className="auth-message">{importMessage}</p>}
             {importResult && (
               <div className="candidate-detail-grid">
                 <div><span>Searched</span><b>{importResult.searched}</b></div>
