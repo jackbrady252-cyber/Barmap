@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import type { DiscoveryImportResult, DiscoveryRegion } from '@/types/discovery';
 
+type ImportRegion = 'london' | 'new-york';
+
 type OverpassElement = {
   type: 'node' | 'way' | 'relation';
   id: number;
@@ -41,8 +43,11 @@ type CandidateInsert = {
 const regionConfig: Record<DiscoveryRegion, { label: string; bbox: [number, number, number, number] }> = {
   ireland: { label: 'Ireland', bbox: [51.2, -10.8, 55.6, -5.4] },
   uk: { label: 'United Kingdom', bbox: [49.8, -8.7, 60.9, 1.9] },
+  london: { label: 'London', bbox: [51.28, -0.51, 51.70, 0.33] },
   'new-york': { label: 'New York City', bbox: [40.4774, -74.2591, 40.9176, -73.7004] }
 };
+
+const importRegions: ImportRegion[] = ['london', 'new-york'];
 
 function cleanEnvValue(value: string | undefined) {
   return (value || '').trim().replace(/^['"]|['"]$/g, '');
@@ -66,20 +71,40 @@ function getSupabaseForRequest(request: NextRequest) {
   });
 }
 
-function overpassQuery(region: DiscoveryRegion) {
+function overpassQuery(region: ImportRegion) {
   const [south, west, north, east] = regionConfig[region].bbox;
   const bbox = `${south},${west},${north},${east}`;
+  const keywordRegex = 'outdoor[_ -]?gym|street[_ -]?workout|calisthenics|fitness station|pull.?up|pull up bars|pull-up bars';
 
   return `
     [out:json][timeout:35];
     (
-      nwr["leisure"="fitness_station"](${bbox});
-      nwr["sport"="calisthenics"](${bbox});
-      nwr["fitness_station"](${bbox});
-      nwr["name"~"outdoor gym|street workout|calisthenics|fitness station|pull.?up",i](${bbox});
-      nwr["description"~"outdoor gym|street workout|calisthenics|fitness station|pull.?up",i](${bbox});
+      node["leisure"="fitness_station"](${bbox});
+      way["leisure"="fitness_station"](${bbox});
+      relation["leisure"="fitness_station"](${bbox});
+      node["sport"="calisthenics"](${bbox});
+      way["sport"="calisthenics"](${bbox});
+      relation["sport"="calisthenics"](${bbox});
+      node["sport"="fitness"](${bbox});
+      way["sport"="fitness"](${bbox});
+      relation["sport"="fitness"](${bbox});
+      node["fitness_station"](${bbox});
+      way["fitness_station"](${bbox});
+      relation["fitness_station"](${bbox});
+      node["fitness_station"~"${keywordRegex}",i](${bbox});
+      way["fitness_station"~"${keywordRegex}",i](${bbox});
+      relation["fitness_station"~"${keywordRegex}",i](${bbox});
+      node["outdoor_gym"](${bbox});
+      way["outdoor_gym"](${bbox});
+      relation["outdoor_gym"](${bbox});
+      node["name"~"${keywordRegex}",i](${bbox});
+      way["name"~"${keywordRegex}",i](${bbox});
+      relation["name"~"${keywordRegex}",i](${bbox});
+      node["description"~"${keywordRegex}",i](${bbox});
+      way["description"~"${keywordRegex}",i](${bbox});
+      relation["description"~"${keywordRegex}",i](${bbox});
     );
-    out center tags 220;
+    out tags center;
   `;
 }
 
@@ -122,18 +147,20 @@ function equipmentFromTags(tags: Record<string, string>) {
   const raw = [
     tags.fitness_station,
     tags.sport,
+    tags.outdoor_gym,
     tags.exercise,
+    tags.equipment,
     tags.description,
     tags.name
   ].filter(Boolean).join('; ');
 
   const equipment = new Set<string>();
-  if (/pull.?up|horizontal_bar|calisthenics/i.test(raw)) equipment.add('Pull-up bars');
+  if (/pull.?up|horizontal.?bar|calisthenics/i.test(raw)) equipment.add('Pull-up bars');
   if (/dip/i.test(raw)) equipment.add('Dip bars');
   if (/parallel/i.test(raw)) equipment.add('Parallel bars');
   if (/rings/i.test(raw)) equipment.add('Rings');
   if (/monkey/i.test(raw)) equipment.add('Monkey bars');
-  if (/fitness_station|outdoor gym|street workout/i.test(raw)) equipment.add('Outdoor fitness station');
+  if (/fitness_station|outdoor[_ -]?gym|street[_ -]?workout|fitness/i.test(raw)) equipment.add('Outdoor fitness station');
 
   return Array.from(equipment);
 }
@@ -143,7 +170,10 @@ function evidenceFromTags(tags: Record<string, string>) {
     tags.leisure ? `leisure=${tags.leisure}` : '',
     tags.sport ? `sport=${tags.sport}` : '',
     tags.fitness_station ? `fitness_station=${tags.fitness_station}` : '',
+    tags.outdoor_gym ? `outdoor_gym=${tags.outdoor_gym}` : '',
     tags.exercise ? `exercise=${tags.exercise}` : '',
+    tags.equipment ? `equipment=${tags.equipment}` : '',
+    addressFromTags(tags) ? `address=${addressFromTags(tags)}` : '',
     tags.description ? `description=${tags.description}` : '',
     tags.name ? `name=${tags.name}` : ''
   ].filter(Boolean);
@@ -152,7 +182,12 @@ function evidenceFromTags(tags: Record<string, string>) {
 }
 
 function isStrongEvidence(tags: Record<string, string>, evidence: string) {
-  return tags.leisure === 'fitness_station' || tags.sport === 'calisthenics' || Boolean(tags.fitness_station) || /calisthenics|street workout|outdoor gym|pull.?up/i.test(evidence);
+  return tags.leisure === 'fitness_station'
+    || tags.sport === 'calisthenics'
+    || tags.sport === 'fitness'
+    || Boolean(tags.fitness_station)
+    || Boolean(tags.outdoor_gym)
+    || /calisthenics|street[_ -]?workout|outdoor[_ -]?gym|pull.?up|fitness station/i.test(evidence);
 }
 
 function confidenceFor(input: { lat: number; lng: number; evidence: string; address: string; photoUrl: string; strongEvidence: boolean }) {
@@ -205,7 +240,21 @@ function isDuplicate(candidate: CandidateInsert, stored: StoredCandidate[]) {
   return stored.some(item => {
     const sameSource = item.source_url && item.source_url === candidate.source_url;
     const nearby = distanceMeters(candidate.lat, candidate.lng, item.lat, item.lng) <= 120;
-    const similarName = candidateName && normalizeName(item.name || '').includes(candidateName.slice(0, 18));
+    const storedName = normalizeName(item.name || '');
+    const candidateTokens = candidateName.split(' ').filter(token => token.length > 2);
+    const storedTokens = storedName.split(' ').filter(token => token.length > 2);
+    const overlap = candidateTokens.filter(token => storedTokens.includes(token)).length;
+    const neededOverlap = Math.min(2, candidateTokens.length, storedTokens.length);
+    const similarName = Boolean(
+      candidateName
+      && storedName
+      && (
+        candidateName === storedName
+        || (candidateName.length >= 8 && storedName.includes(candidateName))
+        || (storedName.length >= 8 && candidateName.includes(storedName))
+        || (neededOverlap > 0 && overlap >= neededOverlap)
+      )
+    );
     return sameSource || (nearby && similarName);
   });
 }
@@ -219,12 +268,13 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({})) as { region?: DiscoveryRegion };
   const region = body.region;
-  if (!region || !regionConfig[region]) return NextResponse.json({ error: 'Region must be ireland, uk, or new-york.' }, { status: 400 });
+  if (!region || !importRegions.includes(region as ImportRegion)) return NextResponse.json({ error: 'Region must be london or new-york.' }, { status: 400 });
+  const importRegion = region as ImportRegion;
 
   const overpassResponse = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ data: overpassQuery(region) })
+    body: new URLSearchParams({ data: overpassQuery(importRegion) })
   });
   if (!overpassResponse.ok) {
     return NextResponse.json({ error: `Overpass failed with ${overpassResponse.status}.` }, { status: 502 });
@@ -234,8 +284,8 @@ export async function POST(request: NextRequest) {
   const elements = overpassData.elements || [];
 
   const [{ data: existingCandidates }, { data: existingSpots }] = await Promise.all([
-    supabase.from('discovery_candidates').select('name,lat,lng,source_url').eq('region', region),
-    supabase.from('public_spots').select('name,lat,lng,source_url').eq('region', region)
+    supabase.from('discovery_candidates').select('name,lat,lng,source_url'),
+    supabase.from('public_spots').select('name,lat,lng,source_url')
   ]);
   const stored: StoredCandidate[] = [
     ...((existingCandidates || []) as StoredCandidate[]),
@@ -258,19 +308,19 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const name = tags.name || tags['official_name'] || `${regionConfig[region].label} fitness station`;
+    const name = tags.name || tags.official_name || `${regionConfig[importRegion].label} fitness station`;
     const address = addressFromTags(tags);
-    const area = areaFromTags(tags, regionConfig[region].label);
+    const area = areaFromTags(tags, regionConfig[importRegion].label);
     const equipmentGuess = equipmentFromTags(tags);
     const strongEvidence = isStrongEvidence(tags, evidence);
     const baseCandidate: CandidateInsert = {
       name,
       area,
       address,
-      region,
+      region: importRegion,
       lat: lat as number,
       lng: lng as number,
-      source: 'OpenStreetMap',
+      source: 'openstreetmap',
       source_url: sourceUrl(element),
       evidence,
       equipment_guess: equipmentGuess,
@@ -285,7 +335,7 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const { candidate, enriched } = await enrichWithGoogle(baseCandidate, regionConfig[region].label);
+    const { candidate, enriched } = await enrichWithGoogle(baseCandidate, regionConfig[importRegion].label);
     if (enriched) googleEnriched += 1;
     candidate.confidence_score = confidenceFor({
       lat: candidate.lat,

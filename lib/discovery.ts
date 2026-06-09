@@ -6,7 +6,7 @@ type DiscoveryCandidateRow = {
   name: string;
   area: string;
   address: string | null;
-  region: 'ireland' | 'uk' | 'new-york' | null;
+  region: 'ireland' | 'uk' | 'london' | 'new-york' | null;
   lat: number;
   lng: number;
   source: string;
@@ -28,7 +28,7 @@ type PublicSpotRow = {
   name: string;
   area: string;
   address: string | null;
-  region: 'ireland' | 'uk' | 'new-york' | null;
+  region: 'ireland' | 'uk' | 'london' | 'new-york' | null;
   lat: number;
   lng: number;
   source: string;

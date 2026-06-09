@@ -18,7 +18,7 @@ const initialForm = {
   name: '',
   area: '',
   address: '',
-  region: 'ireland' as DiscoveryRegion,
+  region: 'london' as DiscoveryRegion,
   lat: '',
   lng: '',
   source: '',
@@ -50,7 +50,7 @@ export default function DiscoveryAdminPage() {
   const [message, setMessage] = useState('');
   const [busyCandidateId, setBusyCandidateId] = useState('');
   const [saving, setSaving] = useState(false);
-  const [importRegion, setImportRegion] = useState<DiscoveryRegion>('uk');
+  const [importRegion, setImportRegion] = useState<DiscoveryRegion>('london');
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<DiscoveryImportResult | null>(null);
 
@@ -177,7 +177,7 @@ export default function DiscoveryAdminPage() {
       if (!response.ok) throw new Error(data.error || 'Import failed.');
 
       setImportResult(data as DiscoveryImportResult);
-      setMessage(`Import complete: added ${data.added}, skipped ${data.skipped}.`);
+      setMessage(`Added ${data.added} candidates, skipped ${data.skipped} duplicates.`);
       await loadCandidates();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Import failed.');
@@ -300,7 +300,7 @@ export default function DiscoveryAdminPage() {
             <label htmlFor="candidate-region">Region</label>
             <select id="candidate-region" value={form.region} onChange={event => updateField('region', event.target.value)}>
               <option value="ireland">Ireland</option>
-              <option value="uk">UK</option>
+              <option value="london">London</option>
               <option value="new-york">New York</option>
             </select>
           </div>
@@ -357,7 +357,7 @@ export default function DiscoveryAdminPage() {
               <div className="form-field">
                 <label htmlFor="import-region">Region</label>
                 <select id="import-region" value={importRegion} onChange={event => setImportRegion(event.target.value as DiscoveryRegion)}>
-                  <option value="uk">UK</option>
+                  <option value="london">London</option>
                   <option value="new-york">New York</option>
                 </select>
               </div>

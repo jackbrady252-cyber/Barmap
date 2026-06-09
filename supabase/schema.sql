@@ -598,20 +598,12 @@ alter table public.discovery_candidates
 alter table public.discovery_candidates
   add column if not exists region text not null default 'ireland';
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'discovery_candidates_region_check'
-      and conrelid = 'public.discovery_candidates'::regclass
-  ) then
-    alter table public.discovery_candidates
-      add constraint discovery_candidates_region_check
-      check (region in ('ireland', 'uk', 'new-york'));
-  end if;
-end;
-$$;
+alter table public.discovery_candidates
+  drop constraint if exists discovery_candidates_region_check;
+
+alter table public.discovery_candidates
+  add constraint discovery_candidates_region_check
+  check (region in ('ireland', 'uk', 'london', 'new-york'));
 
 create index if not exists discovery_candidates_status_created_at_idx
   on public.discovery_candidates (status, created_at desc);
@@ -672,20 +664,12 @@ alter table public.public_spots
 alter table public.public_spots
   add column if not exists region text not null default 'ireland';
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'public_spots_region_check'
-      and conrelid = 'public.public_spots'::regclass
-  ) then
-    alter table public.public_spots
-      add constraint public_spots_region_check
-      check (region in ('ireland', 'uk', 'new-york'));
-  end if;
-end;
-$$;
+alter table public.public_spots
+  drop constraint if exists public_spots_region_check;
+
+alter table public.public_spots
+  add constraint public_spots_region_check
+  check (region in ('ireland', 'uk', 'london', 'new-york'));
 
 create index if not exists public_spots_created_at_idx
   on public.public_spots (created_at desc);

@@ -45,7 +45,7 @@ export type PublicSpot = ParkSeed & {
   region: DiscoveryRegion;
 };
 
-export type DiscoveryRegion = 'ireland' | 'uk' | 'new-york';
+export type DiscoveryRegion = 'ireland' | 'uk' | 'london' | 'new-york';
 
 export type DiscoveryImportResult = {
   region: DiscoveryRegion;
