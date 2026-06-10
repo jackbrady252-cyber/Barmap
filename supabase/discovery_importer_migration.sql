@@ -71,6 +71,7 @@ create table if not exists public.discovery_candidates (
   image_urls text[] not null default '{}',
   image_sources text[] not null default '{}',
   image_attributions text[] not null default '{}',
+  image_diagnostics text[] not null default '{}',
   confidence_score numeric(4, 2) not null default 0 check (confidence_score >= 0 and confidence_score <= 100),
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at timestamptz not null default now(),
@@ -100,6 +101,9 @@ alter table public.discovery_candidates
   add column if not exists image_attributions text[] not null default '{}';
 
 alter table public.discovery_candidates
+  add column if not exists image_diagnostics text[] not null default '{}';
+
+alter table public.discovery_candidates
   drop constraint if exists discovery_candidates_region_check;
 
 alter table public.discovery_candidates
@@ -125,7 +129,8 @@ set image_status = 'internet_verified',
     image_count = 1,
     image_urls = array[photo_url],
     image_sources = array['Existing candidate photo URL'],
-    image_attributions = array[coalesce(nullif(attribution, ''), source_url, 'Existing candidate photo URL')]
+    image_attributions = array[coalesce(nullif(attribution, ''), source_url, 'Existing candidate photo URL')],
+    image_diagnostics = array['image_found']
 where photo_url <> ''
   and image_count = 0;
 

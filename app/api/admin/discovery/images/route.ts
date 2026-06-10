@@ -19,6 +19,8 @@ type ImageProof = {
   attribution: string;
 };
 
+type ImageDiagnostic = 'no_google_api_key' | 'no_google_match' | 'no_osm_image' | 'image_found';
+
 function cleanEnvValue(value: string | undefined) {
   return (value || '').trim().replace(/^['"]|['"]$/g, '');
 }
@@ -95,36 +97,54 @@ function imagesFromOsmTags(tags: Record<string, string>) {
 
 async function searchOsmImages(candidate: CandidateRow) {
   const apiUrl = candidate.source_url ? osmApiUrl(candidate.source_url) : '';
-  if (!apiUrl) return [];
+  if (!apiUrl) return { images: [], diagnostic: 'no_osm_image' as ImageDiagnostic };
 
   const response = await fetch(apiUrl, {
     headers: { 'User-Agent': 'BarMap/1.0 contact: jackbrady252@gmail.com' }
   });
-  if (!response.ok) return [];
+  if (!response.ok) return { images: [], diagnostic: 'no_osm_image' as ImageDiagnostic };
 
   const data = await response.json().catch(() => null) as { elements?: Array<{ tags?: Record<string, string> }> } | null;
   const tags = data?.elements?.[0]?.tags || {};
-  return imagesFromOsmTags(tags);
+  const images = imagesFromOsmTags(tags);
+  return { images, diagnostic: images.length > 0 ? 'image_found' as ImageDiagnostic : 'no_osm_image' as ImageDiagnostic };
 }
 
 async function searchGoogleImages(candidate: CandidateRow) {
   const key = cleanEnvValue(process.env.GOOGLE_PLACES_API_KEY) || cleanEnvValue(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
-  if (!key) return [];
+  if (!key) return { images: [], diagnostic: 'no_google_api_key' as ImageDiagnostic };
 
   const query = encodeURIComponent([candidate.name, candidate.address, candidate.area, 'outdoor gym calisthenics'].filter(Boolean).join(' '));
   const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&location=${candidate.lat},${candidate.lng}&radius=180&key=${encodeURIComponent(key)}`;
+  console.info('[BARMAP discovery] Google Places image lookup', {
+    candidateId: candidate.id,
+    query: decodeURIComponent(query),
+    location: `${candidate.lat},${candidate.lng}`,
+    radius: 180
+  });
   const response = await fetch(url);
-  if (!response.ok) return [];
+  console.info('[BARMAP discovery] Google Places image response', {
+    candidateId: candidate.id,
+    httpStatus: response.status
+  });
+  if (!response.ok) return { images: [], diagnostic: 'no_google_match' as ImageDiagnostic };
 
   const data = await response.json().catch(() => null) as {
+    status?: string;
     results?: Array<{
       name?: string;
       photos?: Array<{ photo_reference?: string; html_attributions?: string[] }>;
     }>;
   } | null;
+  console.info('[BARMAP discovery] Google Places image payload status', {
+    candidateId: candidate.id,
+    placesStatus: data?.status || 'missing_status',
+    resultCount: data?.results?.length || 0,
+    photoCount: data?.results?.[0]?.photos?.length || 0
+  });
   const photos = data?.results?.[0]?.photos || [];
 
-  return photos
+  const images = photos
     .map(photo => {
       if (!photo.photo_reference) return null;
       return {
@@ -134,6 +154,8 @@ async function searchGoogleImages(candidate: CandidateRow) {
       };
     })
     .filter(Boolean) as ImageProof[];
+
+  return { images, diagnostic: images.length > 0 ? 'image_found' as ImageDiagnostic : 'no_google_match' as ImageDiagnostic };
 }
 
 export async function POST(request: NextRequest) {
@@ -160,12 +182,16 @@ export async function POST(request: NextRequest) {
   const existingImage = row.photo_url
     ? [{ url: row.photo_url, source: 'Existing candidate photo URL', attribution: row.attribution || row.source_url || 'Existing candidate photo URL' }]
     : [];
-  const [googleImages, osmImages] = await Promise.all([
+  const [googleResult, osmResult] = await Promise.all([
     searchGoogleImages(row),
     searchOsmImages(row)
   ]);
-  const images = uniqueImages([...existingImage, ...googleImages, ...osmImages]);
+  const images = uniqueImages([...existingImage, ...googleResult.images, ...osmResult.images]);
   const imageStatus = images.length > 0 ? 'internet_verified' : 'none';
+  const diagnostics = Array.from(new Set<ImageDiagnostic>([
+    ...(images.length > 0 ? ['image_found' as ImageDiagnostic] : []),
+    ...(existingImage.length > 0 ? [] : [googleResult.diagnostic, osmResult.diagnostic].filter(diagnostic => diagnostic !== 'image_found'))
+  ]));
 
   const { error: updateError } = await supabase
     .from('discovery_candidates')
@@ -175,6 +201,7 @@ export async function POST(request: NextRequest) {
       image_urls: images.map(image => image.url),
       image_sources: images.map(image => image.source),
       image_attributions: images.map(image => image.attribution),
+      image_diagnostics: diagnostics,
       photo_url: images[0]?.url || '',
       attribution: images[0]?.attribution || ''
     })
@@ -186,6 +213,7 @@ export async function POST(request: NextRequest) {
     imageStatus,
     imageCount: images.length,
     imageSources: Array.from(new Set(images.map(image => image.source))),
+    imageDiagnostics: diagnostics,
     images
   });
 }

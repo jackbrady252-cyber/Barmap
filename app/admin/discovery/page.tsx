@@ -15,6 +15,13 @@ import {
 import { supabase, supabaseConfigured, supabaseConfigStatus } from '@/lib/supabase';
 import type { DiscoveryCandidate, DiscoveryImportResult, DiscoveryRegion } from '@/types/discovery';
 
+const diagnosticLabels = {
+  image_found: 'image found',
+  no_google_match: 'no Google match',
+  no_google_api_key: 'no API key',
+  no_osm_image: 'no OSM image'
+};
+
 const initialForm = {
   name: '',
   area: '',
@@ -51,6 +58,7 @@ export default function DiscoveryAdminPage() {
   const [message, setMessage] = useState('');
   const [busyCandidateId, setBusyCandidateId] = useState('');
   const [busyImageCandidateId, setBusyImageCandidateId] = useState('');
+  const [batchVerifying, setBatchVerifying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showOnlyImageProof, setShowOnlyImageProof] = useState(false);
   const [importRegion, setImportRegion] = useState<DiscoveryRegion>('london');
@@ -60,6 +68,21 @@ export default function DiscoveryAdminPage() {
 
   const pendingCount = candidates.length;
   const imageProofCount = useMemo(() => candidates.filter(candidate => candidate.imageStatus !== 'none' && candidate.imageCount > 0).length, [candidates]);
+  const diagnosticCounts = useMemo(() => {
+    return candidates.reduce((counts, candidate) => {
+      const diagnostics = new Set(candidate.imageDiagnostics);
+      if (candidate.imageStatus !== 'none' && candidate.imageCount > 0) diagnostics.add('image_found');
+      diagnostics.forEach(diagnostic => {
+        counts[diagnostic] += 1;
+      });
+      return counts;
+    }, {
+      image_found: 0,
+      no_google_match: 0,
+      no_google_api_key: 0,
+      no_osm_image: 0
+    });
+  }, [candidates]);
   const visibleCandidates = useMemo(
     () => showOnlyImageProof ? candidates.filter(candidate => candidate.imageStatus !== 'none' && candidate.imageCount > 0) : candidates,
     [candidates, showOnlyImageProof]
@@ -233,13 +256,57 @@ export default function DiscoveryAdminPage() {
       const result = await verifyDiscoveryCandidateImages(candidate.id);
       setMessage(result.imageCount > 0
         ? `Found ${result.imageCount} image${result.imageCount === 1 ? '' : 's'} from ${result.imageSources.join(', ')}.`
-        : 'No image evidence found for this candidate.');
+        : `No image evidence found: ${result.imageDiagnostics.join(', ') || 'unknown'}.`);
       await loadCandidates();
     } catch (err) {
       console.error('[BARMAP discovery] Image verification failed', err);
       setMessage(err instanceof Error ? err.message : 'Image verification failed.');
     } finally {
       setBusyImageCandidateId('');
+    }
+  }
+
+  async function verifyFirstTwentyCandidates() {
+    setBatchVerifying(true);
+    setMessage('');
+
+    const batch = candidates
+      .filter(candidate => candidate.imageStatus === 'none' || candidate.imageCount < 1)
+      .slice(0, 20);
+
+    if (batch.length === 0) {
+      setMessage('No candidates without image proof to verify.');
+      setBatchVerifying(false);
+      return;
+    }
+
+    const counts = {
+      image_found: 0,
+      no_google_match: 0,
+      no_google_api_key: 0,
+      no_osm_image: 0
+    };
+
+    try {
+      for (const candidate of batch) {
+        setBusyImageCandidateId(candidate.id);
+        const result = await verifyDiscoveryCandidateImages(candidate.id);
+        const diagnostics = new Set(result.imageDiagnostics);
+        if (result.imageCount > 0) diagnostics.add('image_found');
+        diagnostics.forEach(diagnostic => {
+          if (diagnostic in counts) counts[diagnostic as keyof typeof counts] += 1;
+        });
+      }
+
+      setMessage(`Verified ${batch.length}. Image found: ${counts.image_found}. No Google match: ${counts.no_google_match}. No API key: ${counts.no_google_api_key}. No OSM image: ${counts.no_osm_image}.`);
+      await loadCandidates();
+    } catch (err) {
+      console.error('[BARMAP discovery] Batch image verification failed', err);
+      setMessage(err instanceof Error ? err.message : 'Batch image verification failed.');
+      await loadCandidates();
+    } finally {
+      setBusyImageCandidateId('');
+      setBatchVerifying(false);
     }
   }
 
@@ -427,6 +494,15 @@ export default function DiscoveryAdminPage() {
             <span>Show only candidates with image proof</span>
             <b>{imageProofCount}/{pendingCount}</b>
           </label>
+          <div className="candidate-detail-grid">
+            <div><span>Image found</span><b>{diagnosticCounts.image_found}</b></div>
+            <div><span>No Google match</span><b>{diagnosticCounts.no_google_match}</b></div>
+            <div><span>No API key</span><b>{diagnosticCounts.no_google_api_key}</b></div>
+            <div><span>No OSM image</span><b>{diagnosticCounts.no_osm_image}</b></div>
+          </div>
+          <button className="btn btn-ghost" type="button" disabled={batchVerifying} onClick={() => void verifyFirstTwentyCandidates()}>
+            {batchVerifying ? 'Verifying first 20...' : 'Verify First 20 Candidates'}
+          </button>
           {visibleCandidates.length === 0 ? (
             <div className="premium-empty compact">
               <b>{showOnlyImageProof ? 'No image-proven candidates' : 'No pending candidates'}</b>
@@ -448,6 +524,10 @@ export default function DiscoveryAdminPage() {
                   <div><span>Status</span><b>{candidate.status}</b></div>
                   <div><span>Image status</span><b>{candidate.imageStatus.replace(/_/g, ' ')}</b></div>
                   <div><span>Images found</span><b>{candidate.imageCount}</b></div>
+                  <div className="wide">
+                    <span>Image diagnostics</span>
+                    <p>{candidate.imageDiagnostics.length ? candidate.imageDiagnostics.map(diagnostic => diagnosticLabels[diagnostic]).join(', ') : 'Not checked yet'}</p>
+                  </div>
                   {candidate.imageSources.length > 0 && <div className="wide"><span>Image sources</span><p>{Array.from(new Set(candidate.imageSources)).join(', ')}</p></div>}
                   {candidate.address && <div className="wide"><span>Address</span><p>{candidate.address}</p></div>}
                   <div className="wide"><span>Evidence</span><p>{candidate.evidence}</p></div>

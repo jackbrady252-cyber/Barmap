@@ -41,6 +41,7 @@ type CandidateInsert = {
   image_urls: string[];
   image_sources: string[];
   image_attributions: string[];
+  image_diagnostics: string[];
   confidence_score: number;
   status: 'pending';
 };
@@ -329,6 +330,7 @@ export async function POST(request: NextRequest) {
       image_urls: [],
       image_sources: [],
       image_attributions: [],
+      image_diagnostics: [],
       confidence_score: confidenceFor({ lat: lat as number, lng: lng as number, evidence, address, photoUrl: '', strongEvidence }),
       status: 'pending'
     };
@@ -346,6 +348,7 @@ export async function POST(request: NextRequest) {
       candidate.image_urls = [candidate.photo_url];
       candidate.image_sources = ['Google Places Photos'];
       candidate.image_attributions = [candidate.attribution || 'Google Places'];
+      candidate.image_diagnostics = ['image_found'];
     }
     candidate.confidence_score = confidenceFor({
       lat: candidate.lat,
