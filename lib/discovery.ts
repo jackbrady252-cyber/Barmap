@@ -15,6 +15,11 @@ type DiscoveryCandidateRow = {
   equipment_guess: string[];
   photo_url: string | null;
   attribution: string | null;
+  image_status: 'none' | 'internet_verified' | 'community_verified' | null;
+  image_count: number | null;
+  image_urls: string[] | null;
+  image_sources: string[] | null;
+  image_attributions: string[] | null;
   confidence_score: number;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
@@ -55,6 +60,11 @@ function rowToCandidate(row: DiscoveryCandidateRow): DiscoveryCandidate {
     equipmentGuess: row.equipment_guess || [],
     photoUrl: row.photo_url || '',
     attribution: row.attribution || '',
+    imageStatus: row.image_status || 'none',
+    imageCount: row.image_count || 0,
+    imageUrls: row.image_urls || [],
+    imageSources: row.image_sources || [],
+    imageAttributions: row.image_attributions || [],
     confidenceScore: row.confidence_score,
     status: row.status,
     createdAt: row.created_at,
@@ -116,7 +126,7 @@ export async function fetchDiscoveryCandidates(status: 'pending' | 'approved' | 
 
   const { data, error } = await supabase
     .from('discovery_candidates')
-    .select('id,name,area,address,region,lat,lng,source,source_url,evidence,equipment_guess,photo_url,attribution,confidence_score,status,created_at,reviewed_at,reviewed_by')
+    .select('id,name,area,address,region,lat,lng,source,source_url,evidence,equipment_guess,photo_url,attribution,image_status,image_count,image_urls,image_sources,image_attributions,confidence_score,status,created_at,reviewed_at,reviewed_by')
     .eq('status', status)
     .order('created_at', { ascending: false });
 
@@ -126,6 +136,7 @@ export async function fetchDiscoveryCandidates(status: 'pending' | 'approved' | 
 
 export async function createDiscoveryCandidate(input: NewDiscoveryCandidate): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured.');
+  const hasManualImage = Boolean(input.photoUrl);
 
   const { error } = await supabase.from('discovery_candidates').insert({
     name: input.name,
@@ -140,6 +151,11 @@ export async function createDiscoveryCandidate(input: NewDiscoveryCandidate): Pr
     equipment_guess: input.equipmentGuess,
     photo_url: input.photoUrl,
     attribution: input.attribution,
+    image_status: hasManualImage ? 'internet_verified' : 'none',
+    image_count: hasManualImage ? 1 : 0,
+    image_urls: hasManualImage ? [input.photoUrl] : [],
+    image_sources: hasManualImage ? [input.source || 'Manual photo URL'] : [],
+    image_attributions: hasManualImage ? [input.attribution || input.sourceUrl || 'Manual photo URL'] : [],
     confidence_score: input.confidenceScore,
     status: 'pending'
   });
@@ -156,6 +172,31 @@ export async function reviewDiscoveryCandidate(id: string, status: 'approved' | 
   });
 
   if (error) throw new Error(`Candidate review failed: ${error.message}`);
+}
+
+export async function verifyDiscoveryCandidateImages(id: string): Promise<{ imageCount: number; imageStatus: string; imageSources: string[] }> {
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error('Admin session required.');
+
+  const response = await fetch('/api/admin/discovery/images', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ candidateId: id })
+  });
+  const data = await response.json().catch(() => ({})) as { error?: string; imageCount?: number; imageStatus?: string; imageSources?: string[] };
+  if (!response.ok) throw new Error(data.error || `Image verification failed with ${response.status}.`);
+
+  return {
+    imageCount: data.imageCount || 0,
+    imageStatus: data.imageStatus || 'none',
+    imageSources: data.imageSources || []
+  };
 }
 
 export async function fetchApprovedDiscoveryParks(): Promise<PublicSpot[]> {

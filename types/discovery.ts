@@ -1,6 +1,7 @@
 import type { ParkSeed } from '@/types/park';
 
 export type DiscoveryCandidateStatus = 'pending' | 'approved' | 'rejected';
+export type DiscoveryImageStatus = 'none' | 'internet_verified' | 'community_verified';
 
 export type DiscoveryCandidate = {
   id: string;
@@ -16,6 +17,11 @@ export type DiscoveryCandidate = {
   equipmentGuess: string[];
   photoUrl: string;
   attribution: string;
+  imageStatus: DiscoveryImageStatus;
+  imageCount: number;
+  imageUrls: string[];
+  imageSources: string[];
+  imageAttributions: string[];
   confidenceScore: number;
   status: DiscoveryCandidateStatus;
   createdAt: string;

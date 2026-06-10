@@ -36,6 +36,11 @@ type CandidateInsert = {
   equipment_guess: string[];
   photo_url: string;
   attribution: string;
+  image_status: 'none' | 'internet_verified' | 'community_verified';
+  image_count: number;
+  image_urls: string[];
+  image_sources: string[];
+  image_attributions: string[];
   confidence_score: number;
   status: 'pending';
 };
@@ -319,6 +324,11 @@ export async function POST(request: NextRequest) {
       equipment_guess: equipmentGuess,
       photo_url: '',
       attribution: 'OpenStreetMap contributors',
+      image_status: 'none',
+      image_count: 0,
+      image_urls: [],
+      image_sources: [],
+      image_attributions: [],
       confidence_score: confidenceFor({ lat: lat as number, lng: lng as number, evidence, address, photoUrl: '', strongEvidence }),
       status: 'pending'
     };
@@ -330,6 +340,13 @@ export async function POST(request: NextRequest) {
 
     const { candidate, enriched } = await enrichWithGoogle(baseCandidate, regionConfig[importRegion].label);
     if (enriched) googleEnriched += 1;
+    if (candidate.photo_url) {
+      candidate.image_status = 'internet_verified';
+      candidate.image_count = 1;
+      candidate.image_urls = [candidate.photo_url];
+      candidate.image_sources = ['Google Places Photos'];
+      candidate.image_attributions = [candidate.attribution || 'Google Places'];
+    }
     candidate.confidence_score = confidenceFor({
       lat: candidate.lat,
       lng: candidate.lng,

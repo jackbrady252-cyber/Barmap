@@ -9,7 +9,8 @@ import {
   fetchDiscoveryCandidates,
   isCurrentUserAdmin,
   parseEquipmentGuess,
-  reviewDiscoveryCandidate
+  reviewDiscoveryCandidate,
+  verifyDiscoveryCandidateImages
 } from '@/lib/discovery';
 import { supabase, supabaseConfigured, supabaseConfigStatus } from '@/lib/supabase';
 import type { DiscoveryCandidate, DiscoveryImportResult, DiscoveryRegion } from '@/types/discovery';
@@ -49,13 +50,20 @@ export default function DiscoveryAdminPage() {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
   const [busyCandidateId, setBusyCandidateId] = useState('');
+  const [busyImageCandidateId, setBusyImageCandidateId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showOnlyImageProof, setShowOnlyImageProof] = useState(false);
   const [importRegion, setImportRegion] = useState<DiscoveryRegion>('london');
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [importResult, setImportResult] = useState<DiscoveryImportResult | null>(null);
 
   const pendingCount = candidates.length;
+  const imageProofCount = useMemo(() => candidates.filter(candidate => candidate.imageStatus !== 'none' && candidate.imageCount > 0).length, [candidates]);
+  const visibleCandidates = useMemo(
+    () => showOnlyImageProof ? candidates.filter(candidate => candidate.imageStatus !== 'none' && candidate.imageCount > 0) : candidates,
+    [candidates, showOnlyImageProof]
+  );
   const confidenceValue = useMemo(() => {
     const parsed = Number(form.confidenceScore);
     if (!Number.isFinite(parsed)) return 0;
@@ -198,6 +206,11 @@ export default function DiscoveryAdminPage() {
   }
 
   async function reviewCandidate(candidate: DiscoveryCandidate, status: 'approved' | 'rejected') {
+    if (status === 'approved' && (candidate.imageStatus === 'none' || candidate.imageCount < 1)) {
+      setMessage('Image evidence is required before approving discovery candidates.');
+      return;
+    }
+
     setBusyCandidateId(candidate.id);
     setMessage('');
 
@@ -209,6 +222,24 @@ export default function DiscoveryAdminPage() {
       setMessage(err instanceof Error ? err.message : 'Candidate review failed.');
     } finally {
       setBusyCandidateId('');
+    }
+  }
+
+  async function verifyImages(candidate: DiscoveryCandidate) {
+    setBusyImageCandidateId(candidate.id);
+    setMessage('');
+
+    try {
+      const result = await verifyDiscoveryCandidateImages(candidate.id);
+      setMessage(result.imageCount > 0
+        ? `Found ${result.imageCount} image${result.imageCount === 1 ? '' : 's'} from ${result.imageSources.join(', ')}.`
+        : 'No image evidence found for this candidate.');
+      await loadCandidates();
+    } catch (err) {
+      console.error('[BARMAP discovery] Image verification failed', err);
+      setMessage(err instanceof Error ? err.message : 'Image verification failed.');
+    } finally {
+      setBusyImageCandidateId('');
     }
   }
 
@@ -391,13 +422,18 @@ export default function DiscoveryAdminPage() {
             <span className="page-kicker">Review Queue</span>
             <h2>Pending candidates</h2>
           </div>
-          {candidates.length === 0 ? (
+          <label className="admin-filter-toggle">
+            <input type="checkbox" checked={showOnlyImageProof} onChange={event => setShowOnlyImageProof(event.target.checked)} />
+            <span>Show only candidates with image proof</span>
+            <b>{imageProofCount}/{pendingCount}</b>
+          </label>
+          {visibleCandidates.length === 0 ? (
             <div className="premium-empty compact">
-              <b>No pending candidates</b>
-              <span>Add a manual finding to start the review queue.</span>
+              <b>{showOnlyImageProof ? 'No image-proven candidates' : 'No pending candidates'}</b>
+              <span>{showOnlyImageProof ? 'Verify images on pending candidates to approve them.' : 'Add a manual finding to start the review queue.'}</span>
             </div>
           ) : (
-            candidates.map(candidate => (
+            visibleCandidates.map(candidate => (
               <article className="admin-candidate-card" key={candidate.id}>
                 <div className="admin-candidate-main">
                   <div>
@@ -410,6 +446,9 @@ export default function DiscoveryAdminPage() {
                 <div className="candidate-detail-grid">
                   <div><span>Coordinates</span><b>{candidate.lat.toFixed(5)}, {candidate.lng.toFixed(5)}</b></div>
                   <div><span>Status</span><b>{candidate.status}</b></div>
+                  <div><span>Image status</span><b>{candidate.imageStatus.replace(/_/g, ' ')}</b></div>
+                  <div><span>Images found</span><b>{candidate.imageCount}</b></div>
+                  {candidate.imageSources.length > 0 && <div className="wide"><span>Image sources</span><p>{Array.from(new Set(candidate.imageSources)).join(', ')}</p></div>}
                   {candidate.address && <div className="wide"><span>Address</span><p>{candidate.address}</p></div>}
                   <div className="wide"><span>Evidence</span><p>{candidate.evidence}</p></div>
                   <div className="wide"><span>Equipment guess</span><p>{candidate.equipmentGuess.length ? candidate.equipmentGuess.join(', ') : 'No equipment guess'}</p></div>
@@ -421,12 +460,29 @@ export default function DiscoveryAdminPage() {
                   )}
                   {candidate.attribution && <div className="wide"><span>Attribution</span><p>{candidate.attribution}</p></div>}
                 </div>
+                {candidate.imageUrls.length > 0 && (
+                  <div className="candidate-image-strip" aria-label={`Images found for ${candidate.name}`}>
+                    {candidate.imageUrls.map((url, index) => (
+                      <a href={url} target="_blank" rel="noreferrer" key={`${candidate.id}-${url}`}>
+                        <img src={url} alt={`${candidate.name} image proof ${index + 1}`} loading="lazy" />
+                      </a>
+                    ))}
+                  </div>
+                )}
                 <p className="admin-legal-note">Check permission and attribution before using any photo publicly.</p>
                 <div className="admin-review-actions">
                   <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={busyImageCandidateId === candidate.id}
+                    onClick={() => void verifyImages(candidate)}
+                  >
+                    {busyImageCandidateId === candidate.id ? 'Verifying...' : 'Verify Images'}
+                  </button>
+                  <button
                     className="btn btn-primary"
                     type="button"
-                    disabled={busyCandidateId === candidate.id}
+                    disabled={busyCandidateId === candidate.id || candidate.imageStatus === 'none' || candidate.imageCount < 1}
                     onClick={() => reviewCandidate(candidate, 'approved')}
                   >
                     {busyCandidateId === candidate.id ? 'Reviewing...' : 'Approve'}

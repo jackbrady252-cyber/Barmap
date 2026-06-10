@@ -585,6 +585,11 @@ create table if not exists public.discovery_candidates (
   equipment_guess text[] not null default '{}',
   photo_url text not null default '',
   attribution text not null default '',
+  image_status text not null default 'none' check (image_status in ('none', 'internet_verified', 'community_verified')),
+  image_count integer not null default 0 check (image_count >= 0),
+  image_urls text[] not null default '{}',
+  image_sources text[] not null default '{}',
+  image_attributions text[] not null default '{}',
   confidence_score numeric(4, 2) not null default 0 check (confidence_score >= 0 and confidence_score <= 100),
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at timestamptz not null default now(),
@@ -599,11 +604,49 @@ alter table public.discovery_candidates
   add column if not exists region text not null default 'ireland';
 
 alter table public.discovery_candidates
+  add column if not exists image_status text not null default 'none';
+
+alter table public.discovery_candidates
+  add column if not exists image_count integer not null default 0;
+
+alter table public.discovery_candidates
+  add column if not exists image_urls text[] not null default '{}';
+
+alter table public.discovery_candidates
+  add column if not exists image_sources text[] not null default '{}';
+
+alter table public.discovery_candidates
+  add column if not exists image_attributions text[] not null default '{}';
+
+alter table public.discovery_candidates
   drop constraint if exists discovery_candidates_region_check;
 
 alter table public.discovery_candidates
   add constraint discovery_candidates_region_check
   check (region in ('ireland', 'uk', 'london', 'new-york'));
+
+alter table public.discovery_candidates
+  drop constraint if exists discovery_candidates_image_status_check;
+
+alter table public.discovery_candidates
+  add constraint discovery_candidates_image_status_check
+  check (image_status in ('none', 'internet_verified', 'community_verified'));
+
+alter table public.discovery_candidates
+  drop constraint if exists discovery_candidates_image_count_check;
+
+alter table public.discovery_candidates
+  add constraint discovery_candidates_image_count_check
+  check (image_count >= 0);
+
+update public.discovery_candidates
+set image_status = 'internet_verified',
+    image_count = 1,
+    image_urls = array[photo_url],
+    image_sources = array['Existing candidate photo URL'],
+    image_attributions = array[coalesce(nullif(attribution, ''), source_url, 'Existing candidate photo URL')]
+where photo_url <> ''
+  and image_count = 0;
 
 create index if not exists discovery_candidates_status_created_at_idx
   on public.discovery_candidates (status, created_at desc);
@@ -728,6 +771,10 @@ begin
     raise exception 'Discovery candidate not found.';
   end if;
 
+  if next_status = 'approved' and (candidate.image_status = 'none' or candidate.image_count < 1) then
+    raise exception 'Image evidence is required before approving discovery candidates.';
+  end if;
+
   update public.discovery_candidates
   set status = next_status,
       reviewed_at = now(),
@@ -762,8 +809,8 @@ begin
       candidate.source_url,
       candidate.evidence,
       candidate.equipment_guess,
-      candidate.photo_url,
-      candidate.attribution
+      coalesce(nullif(candidate.photo_url, ''), candidate.image_urls[1], ''),
+      coalesce(nullif(candidate.attribution, ''), array_to_string(candidate.image_attributions, '; '))
     )
     on conflict (discovery_candidate_id) do update
     set name = excluded.name,
