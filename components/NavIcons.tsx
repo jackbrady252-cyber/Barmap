@@ -48,3 +48,14 @@ export function ProfileIcon() {
     </svg>
   );
 }
+
+export function UsersIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20a6 6 0 0 1 12 0" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path d="M14.5 15.5A5 5 0 0 1 21 20" />
+    </svg>
+  );
+}

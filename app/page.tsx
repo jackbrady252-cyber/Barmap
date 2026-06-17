@@ -15,15 +15,17 @@ import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
 import ProfilePage from '@/components/ProfilePage';
 import SubmitSpotModal from '@/components/SubmitSpotModal';
+import UsersPage from '@/components/UsersPage';
 import { verifiedParks } from '@/data/parks';
 import { getSeededFeedPosts } from '@/data/socialFeed';
 import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
 import { fetchApprovedDiscoveryParks } from '@/lib/discovery';
+import { fetchApprovedUsers, fetchFollowingIds, followUser, unfollowUser } from '@/lib/follows';
 import { fetchPosts } from '@/lib/posts';
 import { fetchSavedPostIds, savePostForUser, unsavePostForUser } from '@/lib/savedPosts';
 import { hydrateParks } from '@/lib/social';
 import { supabase } from '@/lib/supabase';
-import type { AuthMode, UserProfile } from '@/types/auth';
+import type { AuthMode, UserDiscoveryProfile, UserProfile } from '@/types/auth';
 import type { MissionSubmission, WorkoutLog } from '@/types/activity';
 import type { Park } from '@/types/park';
 import type { SocialPost } from '@/types/social';
@@ -48,6 +50,9 @@ export default function Home() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [discoveryUsers, setDiscoveryUsers] = useState<UserDiscoveryProfile[]>([]);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [publicSpotLoading, setPublicSpotLoading] = useState(true);
   const [publicSpotCount, setPublicSpotCount] = useState(0);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
@@ -112,6 +117,34 @@ export default function Home() {
     } catch (err) {
       console.error('[BARMAP saved posts] Could not load saved posts', err);
       showNotice(err instanceof Error ? err.message : 'Saved posts loading failed.');
+    }
+  }, [showNotice]);
+
+  const loadFollowingIds = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setFollowingIds(new Set());
+      return;
+    }
+
+    try {
+      const ids = await fetchFollowingIds(nextUser.id);
+      setFollowingIds(new Set(ids));
+    } catch (err) {
+      console.error('[BARMAP follows] Could not load following list', err);
+      showNotice(err instanceof Error ? err.message : 'Following list loading failed.');
+    }
+  }, [showNotice]);
+
+  const loadUsers = useCallback(async (currentUserId?: string) => {
+    setUsersLoading(true);
+    try {
+      const nextUsers = await fetchApprovedUsers(currentUserId);
+      setDiscoveryUsers(nextUsers);
+    } catch (err) {
+      console.error('[BARMAP users] Could not load user directory', err);
+      showNotice(err instanceof Error ? err.message : 'User directory loading failed.');
+    } finally {
+      setUsersLoading(false);
     }
   }, [showNotice]);
 
@@ -196,6 +229,11 @@ export default function Home() {
   }, [loadSavedPosts, user]);
 
   useEffect(() => {
+    void loadFollowingIds(user);
+    void loadUsers(user?.id);
+  }, [loadFollowingIds, loadUsers, user]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const storedLogs = JSON.parse(window.localStorage.getItem('barmap:workout_logs') || '[]');
@@ -268,6 +306,41 @@ export default function Home() {
         return next;
       });
       showNotice(err instanceof Error ? err.message : 'Save failed.');
+      throw err;
+    }
+  }
+
+  async function handleToggleFollow(targetUser: UserDiscoveryProfile, nextFollowing: boolean) {
+    if (!requireApprovedUser('follow users')) throw new Error('Approval required.');
+    const currentUser = user;
+    if (!currentUser) throw new Error('Approval required.');
+
+    setDiscoveryUsers(current =>
+      current.map(item => {
+        if (item.id !== targetUser.id) return item;
+        return {
+          ...item,
+          isFollowing: nextFollowing,
+          followerCount: Math.max(0, item.followerCount + (nextFollowing ? 1 : -1))
+        };
+      })
+    );
+    setFollowingIds(current => {
+      const next = new Set(current);
+      if (nextFollowing) next.add(targetUser.id);
+      else next.delete(targetUser.id);
+      return next;
+    });
+
+    try {
+      if (nextFollowing) await followUser(currentUser.id, targetUser.id);
+      else await unfollowUser(currentUser.id, targetUser.id);
+      await loadUsers(currentUser.id);
+      await loadFollowingIds(currentUser);
+    } catch (err) {
+      await loadUsers(currentUser.id);
+      await loadFollowingIds(currentUser);
+      showNotice(err instanceof Error ? err.message : 'Follow action failed.');
       throw err;
     }
   }
@@ -380,8 +453,19 @@ export default function Home() {
           posts={posts}
           savedPostIds={savedPostIds}
           canInteract={userApproved}
+          followingUserIds={followingIds}
           onRestrictedAction={() => requireApprovedUser('use feed actions')}
           onToggleSave={handleToggleSave}
+        />
+      )}
+      {activeAppTab === 'users' && (
+        <UsersPage
+          currentUserId={user?.id}
+          users={discoveryUsers}
+          loading={usersLoading}
+          canInteract={userApproved}
+          onRestrictedAction={() => requireApprovedUser('follow users')}
+          onToggleFollow={handleToggleFollow}
         />
       )}
       {activeAppTab === 'challenges' && (

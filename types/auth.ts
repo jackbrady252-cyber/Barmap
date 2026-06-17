@@ -12,3 +12,9 @@ export type UserProfile = {
 };
 
 export type AuthMode = 'login' | 'signup';
+
+export type UserDiscoveryProfile = UserProfile & {
+  followerCount: number;
+  followingCount: number;
+  isFollowing: boolean;
+};
