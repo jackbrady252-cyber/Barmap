@@ -843,6 +843,9 @@ button.action { cursor: pointer; }
 .admin-import-controls {
   display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end;
 }
+.admin-review-filters {
+  display: grid; grid-template-columns: 1fr minmax(190px, .45fr); gap: 10px; align-items: end;
+}
 .admin-user-list {
   width: min(100%, 1080px); margin: 0 auto; display: grid; gap: 12px;
   padding: 16px; border-radius: 18px; background: rgba(20,19,15,.76);
@@ -887,6 +890,20 @@ button.action { cursor: pointer; }
 }
 .admin-candidate-main h3 { margin: 5px 0 5px; font-size: 19px; }
 .admin-candidate-main p { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.45; }
+.candidate-badge-row {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+}
+.candidate-source-badge {
+  width: fit-content; padding: 5px 8px; border-radius: 999px;
+  font-size: 9px; text-transform: uppercase; letter-spacing: .12em; font-weight: 900;
+  border: 1px solid rgba(244,239,227,.08);
+}
+.candidate-source-badge.manual {
+  color: #181308; background: var(--accent-soft); border-color: rgba(220,195,124,.6);
+}
+.candidate-source-badge.imported {
+  color: var(--text-dim); background: rgba(244,239,227,.055);
+}
 .confidence-badge {
   flex: 0 0 auto; min-width: 58px; min-height: 38px; display: grid; place-items: center;
   border-radius: 999px; background: rgba(199,164,90,.1); border: 1px solid rgba(199,164,90,.26);
@@ -986,6 +1003,7 @@ button.action { cursor: pointer; }
     padding-bottom: max(26px, calc(18px + env(safe-area-inset-bottom)));
   }
   .admin-import-controls { grid-template-columns: 1fr; }
+  .admin-review-filters { grid-template-columns: 1fr; }
   .candidate-detail-grid { grid-template-columns: 1fr; }
   .admin-two-col { grid-template-columns: 1fr; }
   .admin-review-actions .btn { flex: 1; justify-content: center; }

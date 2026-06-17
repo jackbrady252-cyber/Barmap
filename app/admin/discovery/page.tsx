@@ -22,6 +22,8 @@ const diagnosticLabels = {
   no_osm_image: 'no OSM image'
 };
 
+type SourceFilter = 'all' | 'manual' | 'imported';
+
 const initialForm = {
   name: '',
   area: '',
@@ -61,6 +63,8 @@ export default function DiscoveryAdminPage() {
   const [batchVerifying, setBatchVerifying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showOnlyImageProof, setShowOnlyImageProof] = useState(false);
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [importRegion, setImportRegion] = useState<DiscoveryRegion>('london');
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
@@ -83,10 +87,28 @@ export default function DiscoveryAdminPage() {
       no_osm_image: 0
     });
   }, [candidates]);
-  const visibleCandidates = useMemo(
-    () => showOnlyImageProof ? candidates.filter(candidate => candidate.imageStatus !== 'none' && candidate.imageCount > 0) : candidates,
-    [candidates, showOnlyImageProof]
-  );
+  const visibleCandidates = useMemo(() => {
+    const q = reviewSearch.trim().toLowerCase();
+
+    return [...candidates]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter(candidate => {
+        if (showOnlyImageProof && (candidate.imageStatus === 'none' || candidate.imageCount < 1)) return false;
+
+        const imported = candidate.source.toLowerCase() === 'openstreetmap';
+        if (sourceFilter === 'manual' && imported) return false;
+        if (sourceFilter === 'imported' && !imported) return false;
+
+        if (!q) return true;
+        return [
+          candidate.name,
+          candidate.area,
+          candidate.address,
+          candidate.source,
+          candidate.evidence
+        ].some(value => value.toLowerCase().includes(q));
+      });
+  }, [candidates, reviewSearch, showOnlyImageProof, sourceFilter]);
   const confidenceValue = useMemo(() => {
     const parsed = Number(form.confidenceScore);
     if (!Number.isFinite(parsed)) return 0;
@@ -489,6 +511,25 @@ export default function DiscoveryAdminPage() {
             <span className="page-kicker">Review Queue</span>
             <h2>Pending candidates</h2>
           </div>
+          <div className="admin-review-filters">
+            <div className="form-field">
+              <label htmlFor="candidate-search">Search candidates</label>
+              <input
+                id="candidate-search"
+                value={reviewSearch}
+                onChange={event => setReviewSearch(event.target.value)}
+                placeholder="Name, area, address, source, evidence"
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="candidate-source-filter">Source</label>
+              <select id="candidate-source-filter" value={sourceFilter} onChange={event => setSourceFilter(event.target.value as SourceFilter)}>
+                <option value="all">All</option>
+                <option value="manual">User/manual submissions</option>
+                <option value="imported">OpenStreetMap/imported</option>
+              </select>
+            </div>
+          </div>
           <label className="admin-filter-toggle">
             <input type="checkbox" checked={showOnlyImageProof} onChange={event => setShowOnlyImageProof(event.target.checked)} />
             <span>Show only candidates with image proof</span>
@@ -513,13 +554,19 @@ export default function DiscoveryAdminPage() {
               <article className="admin-candidate-card" key={candidate.id}>
                 <div className="admin-candidate-main">
                   <div>
-                    <span className="candidate-source">{candidate.source}</span>
+                    <div className="candidate-badge-row">
+                      <span className={`candidate-source-badge ${candidate.source.toLowerCase() === 'openstreetmap' ? 'imported' : 'manual'}`}>
+                        {candidate.source.toLowerCase() === 'openstreetmap' ? 'Imported' : 'User Submission'}
+                      </span>
+                      <span className="candidate-source">{candidate.source}</span>
+                    </div>
                     <h3>{candidate.name}</h3>
                     <p>{candidate.area} · {candidate.region}</p>
                   </div>
                   <div className="confidence-badge">{candidate.confidenceScore}%</div>
                 </div>
                 <div className="candidate-detail-grid">
+                  <div><span>Created</span><b>{new Date(candidate.createdAt).toLocaleString()}</b></div>
                   <div><span>Coordinates</span><b>{candidate.lat.toFixed(5)}, {candidate.lng.toFixed(5)}</b></div>
                   <div><span>Status</span><b>{candidate.status}</b></div>
                   <div><span>Image status</span><b>{candidate.imageStatus.replace(/_/g, ' ')}</b></div>
