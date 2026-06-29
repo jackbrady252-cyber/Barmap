@@ -111,7 +111,10 @@ export default function UsersPage({ currentUserId, users, loading, canInteract, 
               tabIndex={0}
               onClick={() => setSelectedUserId(user.id)}
               onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ' ') setSelectedUserId(user.id);
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedUserId(user.id);
+                }
               }}
             >
               {user.avatarUrl ? (

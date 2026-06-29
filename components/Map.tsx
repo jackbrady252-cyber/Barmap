@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Leaflet from 'leaflet';
 import { LayersIcon, MapIcon, SearchIcon } from '@/components/icons';
 import type { Park } from '@/types/park';
@@ -70,6 +70,16 @@ export default function Map({
   const [activeLayer, setActiveLayer] = useState<'satellite' | 'map'>('satellite');
   const [search, setSearch] = useState('');
   const [mapReady, setMapReady] = useState(false);
+  const searchMatches = useMemo(() => {
+    if (!search.trim()) return [];
+    return parks.filter(park => {
+        const q = search.toLowerCase().trim();
+        return park.name.toLowerCase().includes(q)
+          || park.area.toLowerCase().includes(q)
+          || (park.address || '').toLowerCase().includes(q)
+          || park.equipment.join(' ').toLowerCase().includes(q);
+      }).slice(0, 5);
+  }, [parks, search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,7 +245,8 @@ export default function Map({
     const match = parks.find(park =>
       park.name.toLowerCase().includes(q) ||
       park.area.toLowerCase().includes(q) ||
-      (park.address || '').toLowerCase().includes(q)
+      (park.address || '').toLowerCase().includes(q) ||
+      park.equipment.join(' ').toLowerCase().includes(q)
     );
     if (!match) return;
 
@@ -249,7 +260,8 @@ export default function Map({
         <SearchIcon />
         <input
           id="searchBox"
-          placeholder="Search park or city..."
+          aria-label="Search parks by name, city, address, or equipment"
+          placeholder="Find parks, bars, city..."
           value={search}
           onChange={event => {
             const nextSearch = event.target.value;
@@ -260,6 +272,22 @@ export default function Map({
             if (event.key === 'Enter') focusSearchMatch(true);
           }}
         />
+        {search && (
+          <div className="map-search-results">
+            {searchMatches.length > 0 ? searchMatches.map(park => (
+              <button type="button" key={park.id} onClick={() => {
+                mapRef.current?.flyTo([park.lat, park.lng], 17);
+                onParkSelect(park);
+                setSearch('');
+              }}>
+                <b>{park.name}</b>
+                <span>{park.address || park.area}</span>
+              </button>
+            )) : (
+              <div className="map-search-empty">No parks found</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="layer-toggle">
@@ -292,7 +320,7 @@ export default function Map({
         <span className="num" id="visibleCount">
           {parks.length}
         </span>{' '}
-        verified parks tracked{publicSpotCount > 0 ? `, ${publicSpotCount} approved from review` : ''}
+        parks ready{publicSpotCount > 0 ? `, ${publicSpotCount} community reviewed` : ''}
       </div>
 
       <div id="loadingMsg" style={{ display: publicSpotLoading ? 'block' : 'none' }}>

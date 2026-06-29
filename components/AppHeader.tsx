@@ -9,6 +9,7 @@ type AppHeaderProps = {
   loggedIn: boolean;
   onSubmitPark: () => void;
   onProfileOpen: () => void;
+  onFeedbackOpen: () => void;
 };
 
 function initialsFor(profile: UserProfile | null) {
@@ -21,7 +22,7 @@ function initialsFor(profile: UserProfile | null) {
     .toUpperCase();
 }
 
-export default function AppHeader({ pickingSpot, profile, loggedIn, onSubmitPark, onProfileOpen }: AppHeaderProps) {
+export default function AppHeader({ pickingSpot, profile, loggedIn, onSubmitPark, onProfileOpen, onFeedbackOpen }: AppHeaderProps) {
   const initials = initialsFor(profile);
 
   return (
@@ -41,6 +42,7 @@ export default function AppHeader({ pickingSpot, profile, loggedIn, onSubmitPark
         </div>
       </div>
       <div className="nav-actions">
+        <button className="btn btn-ghost header-feedback" type="button" onClick={onFeedbackOpen}>Feedback</button>
         <button className={`btn${pickingSpot ? ' btn-primary' : ''}`} id="addParkBtn" onClick={onSubmitPark}>
           {pickingSpot ? <PinIcon small /> : <PlusIcon small />}
           {pickingSpot ? 'Pick spot' : 'Submit park'}

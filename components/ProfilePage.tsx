@@ -24,6 +24,7 @@ type ProfilePageProps = {
   onLogWorkout: (log: Omit<WorkoutLog, 'id' | 'createdAt'>) => void;
   onAuthOpen: (mode: AuthMode) => void;
   onSignOut: () => void;
+  onFeedbackOpen: () => void;
 };
 
 function initialsFor(profile: UserProfile | null, user: User | null) {
@@ -53,7 +54,8 @@ export default function ProfilePage({
   onToggleSave,
   onLogWorkout,
   onAuthOpen,
-  onSignOut
+  onSignOut,
+  onFeedbackOpen
 }: ProfilePageProps) {
   const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'stats' | 'saved'>('posts');
   const [logOpen, setLogOpen] = useState(false);
@@ -98,18 +100,14 @@ export default function ProfilePage({
 
   const userStatus = profile?.userStatus || 'pending';
 
-  if (userStatus !== 'approved') {
+  if (userStatus === 'rejected') {
     return (
       <main className="app-main app-page profile-page">
         <div className="profile-auth-card">
           <div className="profile-empty-avatar">{userStatus}</div>
           <span className="page-kicker">Application</span>
-          <h1>{userStatus === 'rejected' ? 'Access not approved' : 'Waiting for approval'}</h1>
-          <p>
-            {userStatus === 'rejected'
-              ? 'This account is not approved for BARMAP access right now.'
-              : 'Your account application is pending admin review. You can still browse the public map and feed, but posting, saving, commenting, submissions, missions, and sessions are locked until approval.'}
-          </p>
+          <h1>Access not approved</h1>
+          <p>This account is not approved for BARMAP access right now.</p>
           <div className="profile-auth-actions">
             <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
           </div>
@@ -179,6 +177,7 @@ export default function ProfilePage({
       <div className="profile-actions">
         <button className="btn btn-primary" type="button" onClick={() => setLogOpen(true)}>Log Workout</button>
         <button className="btn btn-primary" type="button" onClick={onEditProfile}>Edit Profile</button>
+        <button className="btn btn-ghost" type="button" onClick={onFeedbackOpen}>Feedback</button>
         <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
       </div>
 

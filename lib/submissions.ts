@@ -13,11 +13,13 @@ type SubmittedSpotRow = {
   hidden_level: string;
   best_time: string;
   notes: string;
+  photo_url?: string;
   status: SubmittedSpot['status'];
   created_at: string;
 };
 
 type NewSubmittedSpot = Omit<SubmittedSpot, 'id' | 'createdAt' | 'status'>;
+const PARK_SUBMISSIONS_BUCKET = 'park-submissions';
 
 export function equipmentFromInput(value: string) {
   return value
@@ -64,6 +66,7 @@ function rowToSubmittedSpot(row: SubmittedSpotRow): SubmittedSpot {
     hiddenLevel: row.hidden_level,
     bestTime: row.best_time,
     notes: row.notes,
+    photoUrl: row.photo_url || '',
     status: row.status,
     createdAt: row.created_at
   };
@@ -96,9 +99,10 @@ export async function createSubmittedSpot(input: NewSubmittedSpot): Promise<Subm
       hidden_level: input.hiddenLevel,
       best_time: input.bestTime,
       notes: input.notes,
+      photo_url: input.photoUrl || '',
       status: 'pending'
     })
-    .select('id,name,area,lat,lng,equipment,hidden_level,best_time,notes,status,created_at')
+    .select('id,name,area,lat,lng,equipment,hidden_level,best_time,notes,photo_url,status,created_at')
     .single<SubmittedSpotRow>();
 
   if (error) {
@@ -108,7 +112,35 @@ export async function createSubmittedSpot(input: NewSubmittedSpot): Promise<Subm
     return localSpot;
   }
 
-  return rowToSubmittedSpot(data);
+  const submittedSpot = rowToSubmittedSpot(data);
+
+  const { error: candidateError } = await supabase.from('discovery_candidates').insert({
+    name: input.name,
+    area: input.area,
+    address: input.area,
+    region: 'ireland',
+    lat: input.lat,
+    lng: input.lng,
+    source: 'user_submission',
+    source_url: '',
+    evidence: input.notes || 'Submitted by a BarMap community member.',
+    equipment_guess: input.equipment,
+    photo_url: input.photoUrl || '',
+    attribution: 'BarMap community submission',
+    image_status: input.photoUrl ? 'community_verified' : 'none',
+    image_count: input.photoUrl ? 1 : 0,
+    image_urls: input.photoUrl ? [input.photoUrl] : [],
+    image_sources: input.photoUrl ? ['User uploaded photo'] : [],
+    image_attributions: input.photoUrl ? ['BarMap community submission'] : [],
+    image_diagnostics: input.photoUrl ? ['image_found'] : [],
+    confidence_score: input.photoUrl ? 82 : 45,
+    status: 'pending'
+  });
+  if (candidateError) {
+    console.warn('Could not create discovery review candidate for submitted park.', candidateError);
+  }
+
+  return submittedSpot;
 }
 
 export async function fetchSubmittedSpots(): Promise<SubmittedSpot[]> {
@@ -116,7 +148,7 @@ export async function fetchSubmittedSpots(): Promise<SubmittedSpot[]> {
 
   const { data, error } = await supabase
     .from('submitted_spots')
-    .select('id,name,area,lat,lng,equipment,hidden_level,best_time,notes,status,created_at')
+    .select('id,name,area,lat,lng,equipment,hidden_level,best_time,notes,photo_url,status,created_at')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -125,4 +157,23 @@ export async function fetchSubmittedSpots(): Promise<SubmittedSpot[]> {
   }
 
   return (data || []).map(row => rowToSubmittedSpot(row as SubmittedSpotRow));
+}
+
+function sanitizeFileName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '') || 'park-photo';
+}
+
+export async function uploadSubmissionPhoto(userId: string, file: File): Promise<string> {
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const path = `${userId}/${Date.now()}-${sanitizeFileName(file.name)}`;
+  const { error } = await supabase.storage.from(PARK_SUBMISSIONS_BUCKET).upload(path, file, {
+    cacheControl: '3600',
+    contentType: file.type || 'image/jpeg',
+    upsert: false
+  });
+  if (error) throw new Error(`Photo upload failed: ${error.message}`);
+
+  const { data } = supabase.storage.from(PARK_SUBMISSIONS_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
 }

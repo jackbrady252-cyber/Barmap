@@ -169,7 +169,7 @@ export async function fetchPosts(parks: Park[]): Promise<SocialPost[]> {
 
 export async function createPost(input: CreatePostInput): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured. Add the Supabase URL and anon key before creating posts.');
-  if (input.profile?.userStatus !== 'approved') throw new Error('Your account must be approved before creating posts.');
+  if (input.profile?.userStatus === 'rejected') throw new Error('This account cannot create posts.');
 
   const caption = input.caption.trim();
   if (!caption) throw new Error('Caption is required.');

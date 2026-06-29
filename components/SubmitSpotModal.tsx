@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { CloseIcon } from '@/components/icons';
-import { createSubmittedSpot, equipmentFromInput } from '@/lib/submissions';
+import type { User } from '@supabase/supabase-js';
+import { createSubmittedSpot, equipmentFromInput, uploadSubmissionPhoto } from '@/lib/submissions';
 
 type SubmitSpotModalProps = {
   pickedLatLng: {
@@ -10,6 +11,7 @@ type SubmitSpotModalProps = {
     lng: number;
   } | null;
   canSubmit: boolean;
+  user: User | null;
   onRestrictedAction: () => void;
   onClose: () => void;
   onSaved: () => void;
@@ -24,11 +26,18 @@ const initialForm = {
   notes: ''
 };
 
-export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedAction, onClose, onSaved }: SubmitSpotModalProps) {
+export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestrictedAction, onClose, onSaved }: SubmitSpotModalProps) {
   const [form, setForm] = useState(initialForm);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (pickedLatLng) setForm(initialForm);
+    if (pickedLatLng) {
+      setForm(initialForm);
+      setPhoto(null);
+      setError('');
+    }
   }, [pickedLatLng]);
 
   function updateField(field: keyof typeof initialForm, value: string) {
@@ -42,23 +51,40 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedA
       onRestrictedAction();
       return;
     }
+    if (!user) {
+      setError('Log in to submit a park.');
+      return;
+    }
 
     const equipment = equipmentFromInput(form.equipment);
-    if (!form.name.trim() || !form.area.trim() || equipment.length === 0) return;
+    if (!form.name.trim() || !form.area.trim() || !photo) {
+      setError('Park name, location, and at least one photo are required.');
+      return;
+    }
 
-    await createSubmittedSpot({
-      name: form.name.trim(),
-      area: form.area.trim(),
-      equipment,
-      hiddenLevel: form.hiddenLevel,
-      bestTime: form.bestTime.trim(),
-      notes: form.notes.trim(),
-      lat: pickedLatLng.lat,
-      lng: pickedLatLng.lng
-    });
+    try {
+      setSaving(true);
+      setError('');
+      const photoUrl = await uploadSubmissionPhoto(user.id, photo);
+      await createSubmittedSpot({
+        name: form.name.trim(),
+        area: form.area.trim(),
+        equipment,
+        hiddenLevel: form.hiddenLevel,
+        bestTime: form.bestTime.trim(),
+        notes: form.notes.trim(),
+        photoUrl,
+        lat: pickedLatLng.lat,
+        lng: pickedLatLng.lng
+      });
 
-    onClose();
-    onSaved();
+      onClose();
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Park submission failed.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -93,7 +119,7 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedA
               />
             </div>
             <div className="form-field">
-              <label htmlFor="spotArea">Area</label>
+              <label htmlFor="spotArea">Area / location</label>
               <input
                 id="spotArea"
                 required
@@ -113,10 +139,9 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedA
               </select>
             </div>
             <div className="form-field full">
-              <label htmlFor="spotEquipment">Equipment</label>
+              <label htmlFor="spotEquipment">Equipment optional</label>
               <input
                 id="spotEquipment"
-                required
                 maxLength={160}
                 placeholder="Pull-up bars, dip bars, rings..."
                 value={form.equipment}
@@ -124,7 +149,7 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedA
               />
             </div>
             <div className="form-field full">
-              <label htmlFor="bestTime">Best time to train</label>
+              <label htmlFor="bestTime">Best time to train optional</label>
               <input
                 id="bestTime"
                 maxLength={100}
@@ -134,7 +159,18 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedA
               />
             </div>
             <div className="form-field full">
-              <label htmlFor="spotNotes">Notes</label>
+              <label htmlFor="spotPhoto">Photo proof</label>
+              <input
+                id="spotPhoto"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                required
+                onChange={event => setPhoto(event.target.files?.[0] || null)}
+              />
+            </div>
+            <div className="form-field full">
+              <label htmlFor="spotNotes">Notes optional</label>
               <textarea
                 id="spotNotes"
                 maxLength={500}
@@ -144,12 +180,13 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, onRestrictedA
               />
             </div>
           </div>
+          {error && <p className="auth-message">{error}</p>}
           <div className="form-actions">
             <button className="btn btn-ghost" id="cancelHiddenSpot" type="button" onClick={onClose}>
               Cancel
             </button>
-            <button className="btn btn-primary" type="submit">
-              {canSubmit ? 'Save for review' : 'Approval required'}
+            <button className="btn btn-primary" type="submit" disabled={saving}>
+              {saving ? 'Submitting...' : canSubmit ? 'Submit for review' : 'Sign in required'}
             </button>
           </div>
         </form>

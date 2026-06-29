@@ -77,6 +77,11 @@ export default function ParkPanel({
   const gmapsDir = `https://www.google.com/maps/dir/?api=1&destination=${park.lat},${park.lng}`;
   const gmapsView = `https://www.google.com/maps/search/?api=1&query=${park.lat},${park.lng}`;
   const osmUrl = `https://www.openstreetmap.org/?mlat=${park.lat}&mlon=${park.lng}#map=19/${park.lat}/${park.lng}`;
+  const verificationLabel = park.source === 'discovery'
+    ? 'Community Verified'
+    : park.verified
+      ? 'Verified'
+      : 'Needs Verification';
 
   function submitPost() {
     if (!canInteract) {
@@ -118,7 +123,7 @@ export default function ParkPanel({
         {park.verified && (
           <div className="hero-badge" id="parkHeroBadge">
             <CheckIcon />
-            {park.sourceName ? `${park.sourceName} verified` : 'OSM verified'}
+            {verificationLabel}
           </div>
         )}
       </div>
@@ -145,10 +150,16 @@ export default function ParkPanel({
       </div>
 
       <div className="equipment-wrap">
-        <div className="equipment-label">Equipment available</div>
+        <div className="equipment-label">Equipment available · {verificationLabel}</div>
         <div className="equipment" id="equipment">
           {park.equipment.map(item => <span className="chip" key={item}>{item}</span>)}
         </div>
+        {(park.sourceName || park.imgCredit) && (
+          <div className="park-trust-line">
+            {park.sourceName && <span>Contributor/source: {park.sourceName}</span>}
+            {park.imgCredit && <span>Photo: {park.imgCredit}</span>}
+          </div>
+        )}
       </div>
 
       <div className="external-links" id="externalLinks">

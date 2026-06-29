@@ -120,7 +120,7 @@ export async function ensureProfile(user: User, input?: Partial<SignUpInput>): P
   const username = normalizeUsername(input?.username || metadata.username || usernameFromEmail(user.email));
   const displayName = input?.displayName || metadata.display_name || username;
   const homeCity = input?.homeCity || metadata.home_city || '';
-  const userStatus: UserStatus = user.email?.toLowerCase() === 'jackbrady252@gmail.com' ? 'approved' : 'pending';
+  const userStatus: UserStatus = 'approved';
 
   const { data, error } = await supabase
     .from('profiles')

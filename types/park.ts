@@ -67,6 +67,7 @@ export type SubmittedSpot = {
   hiddenLevel: string;
   bestTime: string;
   notes: string;
+  photoUrl?: string;
   createdAt: string;
   status: SubmittedSpotStatus;
 };

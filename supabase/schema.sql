@@ -15,12 +15,12 @@ create table if not exists public.profiles (
   avatar_url text not null default '',
   bio text not null default '',
   home_city text not null default '',
-  user_status text not null default 'pending',
+  user_status text not null default 'approved',
   created_at timestamptz not null default now()
 );
 
 alter table public.profiles
-  add column if not exists user_status text not null default 'pending';
+  add column if not exists user_status text not null default 'approved';
 
 do $$
 begin
@@ -146,8 +146,8 @@ begin
     coalesce(new.raw_user_meta_data->>'bio', ''),
     coalesce(new.raw_user_meta_data->>'home_city', ''),
     case
-      when lower(coalesce(new.email, '')) = 'jackbrady252@gmail.com' then 'approved'
-      else 'pending'
+      when lower(coalesce(new.email, '')) = '' then 'pending'
+      else 'approved'
     end
   )
   on conflict (id) do nothing;
@@ -318,6 +318,7 @@ create table if not exists public.submitted_spots (
   hidden_level text not null default 'Easy to find',
   best_time text not null default '',
   notes text not null default '',
+  photo_url text not null default '',
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at timestamptz not null default now()
 );
@@ -384,8 +385,8 @@ as $$
       select 1
       from public.profiles
       where id = auth.uid()
-        and user_status = 'approved'
-    );
+    and user_status <> 'rejected'
+  );
 $$;
 
 grant execute on function public.is_approved_user() to authenticated;
@@ -454,13 +455,7 @@ create policy "Users can insert their pending profile"
   to authenticated
   with check (
     auth.uid() = id
-    and (
-      user_status = 'pending'
-      or (
-        user_status = 'approved'
-        and lower(coalesce(auth.jwt()->>'email', '')) = 'jackbrady252@gmail.com'
-      )
-    )
+    and user_status in ('pending', 'approved')
   );
 
 drop policy if exists "Users can update their own profile" on public.profiles;
@@ -732,6 +727,19 @@ create policy "Admins can create discovery candidates"
   for insert
   to authenticated
   with check (public.is_admin());
+
+drop policy if exists "Approved users can submit discovery candidates" on public.discovery_candidates;
+create policy "Approved users can submit discovery candidates"
+  on public.discovery_candidates
+  for insert
+  to authenticated
+  with check (
+    public.is_approved_user()
+    and source <> 'openstreetmap'
+    and status = 'pending'
+    and image_status <> 'none'
+    and image_count > 0
+  );
 
 drop policy if exists "Admins can update discovery candidates" on public.discovery_candidates;
 create policy "Admins can update discovery candidates"

@@ -91,7 +91,12 @@ export default function DiscoveryAdminPage() {
     const q = reviewSearch.trim().toLowerCase();
 
     return [...candidates]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => {
+        const aImported = a.source.toLowerCase() === 'openstreetmap';
+        const bImported = b.source.toLowerCase() === 'openstreetmap';
+        if (aImported !== bImported) return aImported ? 1 : -1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      })
       .filter(candidate => {
         if (showOnlyImageProof && (candidate.imageStatus === 'none' || candidate.imageCount < 1)) return false;
 
@@ -556,7 +561,7 @@ export default function DiscoveryAdminPage() {
                   <div>
                     <div className="candidate-badge-row">
                       <span className={`candidate-source-badge ${candidate.source.toLowerCase() === 'openstreetmap' ? 'imported' : 'manual'}`}>
-                        {candidate.source.toLowerCase() === 'openstreetmap' ? 'Imported' : 'User Submission'}
+                        {candidate.source.toLowerCase() === 'openstreetmap' ? 'Needs Verification' : 'User Submission'}
                       </span>
                       <span className="candidate-source">{candidate.source}</span>
                     </div>

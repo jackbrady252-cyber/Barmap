@@ -10,6 +10,7 @@ import CreatePostModal from '@/components/CreatePostModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import EventsPage from '@/components/EventsPage';
 import FeedPage from '@/components/FeedPage';
+import FeedbackModal from '@/components/FeedbackModal';
 import { PlusIcon } from '@/components/icons';
 import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
@@ -39,11 +40,12 @@ export default function Home() {
   const initialParks = useMemo(() => hydrateParks(verifiedParks), []);
   const [parks, setParks] = useState<Park[]>(initialParks);
   const [selectedParkId, setSelectedParkId] = useState<number | null>(null);
-  const [activeAppTab, setActiveAppTab] = useState<AppTab>('feed');
+  const [activeAppTab, setActiveAppTab] = useState<AppTab>('map');
   const [activeParkTab, setActiveParkTab] = useState('feed');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [createPostOpen, setCreatePostOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -65,7 +67,7 @@ export default function Home() {
   const selectedPark = parks.find(park => park.id === selectedParkId) || null;
   const feedPosts = useMemo(() => [...posts, ...getSeededFeedPosts(parks)], [parks, posts]);
   const savedPosts = useMemo(() => feedPosts.filter(post => savedPostIds.has(post.id)), [feedPosts, savedPostIds]);
-  const userApproved = Boolean(user && profile?.userStatus === 'approved');
+  const userApproved = Boolean(user && profile?.userStatus !== 'rejected');
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -263,11 +265,6 @@ export default function Home() {
       return false;
     }
 
-    if (profile?.userStatus !== 'approved') {
-      showNotice('Your account is pending admin approval.');
-      return false;
-    }
-
     return true;
   }
 
@@ -445,6 +442,7 @@ export default function Home() {
           setPickingSpot(current => !current);
         }}
         onProfileOpen={() => setActiveAppTab('profile')}
+        onFeedbackOpen={() => setFeedbackOpen(true)}
       />
 
       {activeAppTab === 'feed' && (
@@ -500,6 +498,7 @@ export default function Home() {
           onLogWorkout={saveWorkoutLog}
           onAuthOpen={openAuth}
           onSignOut={handleSignOut}
+          onFeedbackOpen={() => setFeedbackOpen(true)}
         />
       )}
       {activeAppTab === 'map' && (
@@ -536,6 +535,7 @@ export default function Home() {
       <SubmitSpotModal
         pickedLatLng={pickedLatLng}
         canSubmit={userApproved}
+        user={user}
         onRestrictedAction={() => requireApprovedUser('submit parks')}
         onClose={() => {
           setPickedLatLng(null);
@@ -543,7 +543,7 @@ export default function Home() {
         }}
         onSaved={() => {
           setActiveAppTab('map');
-          showNotice('Saved for review. It will not appear on the map until it is verified against a source.');
+          showNotice('Thanks! Your park has been submitted and will be reviewed before appearing publicly.');
         }}
       />
       <button
@@ -602,6 +602,12 @@ export default function Home() {
           setProfile(nextProfile);
           showNotice('Profile saved.');
         }}
+      />
+      <FeedbackModal
+        open={feedbackOpen}
+        user={user}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmitted={() => showNotice("Thanks for helping improve BarMap. We'll review your feedback as soon as possible.")}
       />
     </div>
   );

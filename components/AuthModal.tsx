@@ -51,7 +51,7 @@ export default function AuthModal({ mode, open, onClose, onModeChange, onAuthent
       const session = result.session;
 
       if (mode === 'signup' && user && !session) {
-        setMessage('Signup worked. Supabase sent a verification email. Open it, verify your email, then return here and log in. Your BARMAP access will stay pending until admin approval.');
+        setMessage('Signup worked. Supabase sent a verification email. Open it, verify your email, then return here and log in.');
       } else {
         onAuthenticated(null);
         onClose();

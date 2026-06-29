@@ -20,7 +20,14 @@ export default function BottomNav({ activeTab, onTabChange }: { activeTab: AppTa
       {tabs.map(tab => {
         const Icon = tab.icon;
         return (
-          <button className={`bottom-nav__item${activeTab === tab.id ? ' active' : ''}`} key={tab.id} onClick={() => onTabChange(tab.id)}>
+          <button
+            className={`bottom-nav__item${activeTab === tab.id ? ' active' : ''}`}
+            key={tab.id}
+            type="button"
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            aria-label={tab.label}
+            onClick={() => onTabChange(tab.id)}
+          >
             <Icon />
             <span>{tab.label}</span>
           </button>
