@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js';
+import { sanitizeFileName, type SelectedMediaFile } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
 import type { UserProfile } from '@/types/auth';
 import type { Park } from '@/types/park';
@@ -30,14 +31,22 @@ type PostRow = {
   profiles?: ProfileRow | ProfileRow[] | null;
 };
 
+type PostMediaRow = {
+  id: string;
+  post_id: string;
+  media_type: 'image' | 'video';
+  media_url: string;
+  position: number;
+};
+
 export type CreatePostInput = {
   user: User;
   profile: UserProfile | null;
   caption: string;
-  mediaType: 'image' | 'video';
-  imageFile?: File | null;
+  mediaFiles: SelectedMediaFile[];
   park?: Park | null;
   missionTag?: string;
+  onProgress?: (completed: number, total: number) => void;
 };
 
 function initialsFor(name: string, fallback: string) {
@@ -84,8 +93,18 @@ function relativeTime(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function postRowToSocialPost(row: PostRow, parks: Park[]): SocialPost {
+function postRowToSocialPost(row: PostRow, parks: Park[], mediaRows: PostMediaRow[] = []): SocialPost {
   const matchedPark = typeof row.park_id === 'number' ? parks.find(park => park.id === row.park_id) : undefined;
+  const mediaItems = mediaRows
+    .filter(item => item.post_id === row.id)
+    .sort((a, b) => a.position - b.position)
+    .map(item => ({
+      id: item.id,
+      mediaType: item.media_type,
+      mediaUrl: item.media_url,
+      position: item.position
+    }));
+  const firstMedia = mediaItems[0];
   const fallbackPark = row.location_name
     ? ({
         id: row.park_id || -1,
@@ -97,7 +116,7 @@ function postRowToSocialPost(row: PostRow, parks: Park[]): SocialPost {
         hiddenLevel: '',
         bestTime: '',
         verified: false,
-        img: row.media_url || '',
+        img: firstMedia?.mediaUrl || row.media_url || '',
         source: 'cm',
         sourceUrl: '',
         rating: 'New',
@@ -112,8 +131,13 @@ function postRowToSocialPost(row: PostRow, parks: Park[]): SocialPost {
     id: row.id,
     user: userFromProfile(profileFromJoined(row), row.user_id),
     park: matchedPark || fallbackPark,
-    mediaType: row.media_type,
-    mediaUrl: row.media_url || undefined,
+    mediaType: firstMedia?.mediaType || row.media_type,
+    mediaUrl: firstMedia?.mediaUrl || row.media_url || undefined,
+    mediaItems: mediaItems.length
+      ? mediaItems
+      : row.media_url
+        ? [{ id: `${row.id}-legacy-media`, mediaType: row.media_type, mediaUrl: row.media_url, position: 0 }]
+        : [],
     caption: row.caption,
     challenge: row.mission_tag || undefined,
     tags: row.mission_tag ? ['mission'] : [],
@@ -124,10 +148,6 @@ function postRowToSocialPost(row: PostRow, parks: Park[]): SocialPost {
     createdBy: row.user_id,
     createdAt: row.created_at
   };
-}
-
-function sanitizeFileName(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '') || 'post-image';
 }
 
 export async function fetchPosts(parks: Park[]): Promise<SocialPost[]> {
@@ -164,7 +184,25 @@ export async function fetchPosts(parks: Park[]): Promise<SocialPost[]> {
     throw new Error(`Post fetch failed: ${error.message}`);
   }
 
-  return ((data || []) as unknown as PostRow[]).map(row => postRowToSocialPost(row, parks));
+  const rows = (data || []) as unknown as PostRow[];
+  const postIds = rows.map(row => row.id);
+  let mediaRows: PostMediaRow[] = [];
+
+  if (postIds.length > 0) {
+    const { data: mediaData, error: mediaError } = await supabase
+      .from('post_media')
+      .select('id,post_id,media_type,media_url,position')
+      .in('post_id', postIds)
+      .order('position', { ascending: true });
+
+    if (mediaError) {
+      console.warn('[BARMAP posts] Post media fetch failed; falling back to legacy media fields', mediaError);
+    } else {
+      mediaRows = (mediaData || []) as PostMediaRow[];
+    }
+  }
+
+  return rows.map(row => postRowToSocialPost(row, parks, mediaRows));
 }
 
 export async function createPost(input: CreatePostInput): Promise<void> {
@@ -173,43 +211,59 @@ export async function createPost(input: CreatePostInput): Promise<void> {
 
   const caption = input.caption.trim();
   if (!caption) throw new Error('Caption is required.');
+  if (input.mediaFiles.length === 0) throw new Error('Choose at least one photo or video.');
 
-  let mediaUrl = '';
-
-  if (input.mediaType === 'image') {
-    if (!input.imageFile) throw new Error('Choose an image to upload.');
-
-    const path = `${input.user.id}/${Date.now()}-${sanitizeFileName(input.imageFile.name)}`;
+  const uploaded = [];
+  let completed = 0;
+  for (const item of input.mediaFiles) {
+    const path = `${input.user.id}/${Date.now()}-${item.id}-${sanitizeFileName(item.file.name)}`;
     const { error: uploadError } = await supabase.storage
       .from(POST_MEDIA_BUCKET)
-      .upload(path, input.imageFile, {
+      .upload(path, item.file, {
         cacheControl: '3600',
-        contentType: input.imageFile.type || 'image/jpeg',
+        contentType: item.file.type || (item.mediaType === 'image' ? 'image/jpeg' : 'video/mp4'),
         upsert: false
       });
 
     if (uploadError) {
       console.error('[BARMAP posts] Media upload failed', uploadError);
-      throw new Error(`Media upload failed: ${uploadError.message}`);
+      throw new Error(`Media upload failed for ${item.file.name}: ${uploadError.message}`);
     }
 
     const { data } = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path);
-    mediaUrl = data.publicUrl;
+    uploaded.push({ ...item, mediaUrl: data.publicUrl });
+    completed += 1;
+    input.onProgress?.(completed, input.mediaFiles.length);
   }
 
-  const { error } = await supabase.from('posts').insert({
+  const first = uploaded[0];
+  const { data: postData, error } = await supabase.from('posts').insert({
     user_id: input.user.id,
     caption,
-    media_type: input.mediaType,
-    media_url: mediaUrl,
+    media_type: first.mediaType,
+    media_url: first.mediaUrl,
     park_id: input.park?.id || null,
     location_name: input.park?.name || null,
     location_area: input.park?.area || null,
     mission_tag: input.missionTag?.trim() || null
-  });
+  }).select('id').single<{ id: string }>();
 
   if (error) {
     console.error('[BARMAP posts] Create failed', error);
     throw new Error(`Post creation failed: ${error.message}`);
+  }
+
+  const { error: mediaError } = await supabase.from('post_media').insert(
+    uploaded.map((item, position) => ({
+      post_id: postData.id,
+      media_type: item.mediaType,
+      media_url: item.mediaUrl,
+      position
+    }))
+  );
+
+  if (mediaError) {
+    console.error('[BARMAP posts] Post media insert failed', mediaError);
+    throw new Error(`Post media save failed: ${mediaError.message}`);
   }
 }

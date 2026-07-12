@@ -53,6 +53,15 @@ export type Park = ParkSeed & {
   feed: FeedPost[];
   meetups: Meetup[];
   challenges: Challenge[];
+  media?: Array<{
+    id: string;
+    mediaType: 'image' | 'video';
+    mediaUrl: string;
+    userId?: string;
+    moderationStatus: 'pending' | 'approved' | 'rejected';
+    createdAt: string;
+  }>;
+  pendingMediaCount?: number;
 };
 
 export type SubmittedSpotStatus = 'pending' | 'approved' | 'rejected';

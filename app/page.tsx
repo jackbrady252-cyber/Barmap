@@ -11,7 +11,6 @@ import EditProfileModal from '@/components/EditProfileModal';
 import EventsPage from '@/components/EventsPage';
 import FeedPage from '@/components/FeedPage';
 import FeedbackModal from '@/components/FeedbackModal';
-import { PlusIcon } from '@/components/icons';
 import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
 import ProfilePage from '@/components/ProfilePage';
@@ -22,8 +21,10 @@ import { getSeededFeedPosts } from '@/data/socialFeed';
 import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
 import { fetchApprovedDiscoveryParks } from '@/lib/discovery';
 import { fetchApprovedUsers, fetchFollowingIds, followUser, unfollowUser } from '@/lib/follows';
+import { fetchApprovedParkMedia, fetchOwnPendingParkMedia, type ParkMediaItem } from '@/lib/parkMedia';
 import { fetchPosts } from '@/lib/posts';
 import { fetchSavedPostIds, savePostForUser, unsavePostForUser } from '@/lib/savedPosts';
+import { fetchUpcomingSessions, type TrainingSession } from '@/lib/sessions';
 import { hydrateParks } from '@/lib/social';
 import { supabase } from '@/lib/supabase';
 import type { AuthMode, UserDiscoveryProfile, UserProfile } from '@/types/auth';
@@ -57,6 +58,8 @@ export default function Home() {
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [publicSpotLoading, setPublicSpotLoading] = useState(true);
   const [publicSpotCount, setPublicSpotCount] = useState(0);
+  const [parkMedia, setParkMedia] = useState<ParkMediaItem[]>([]);
+  const [sessions, setSessions] = useState<TrainingSession[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
   const [pickedLatLng, setPickedLatLng] = useState<PickedLatLng | null>(null);
@@ -64,8 +67,25 @@ export default function Home() {
   const [notice, setNotice] = useState('');
   const noticeTimer = useRef<number | null>(null);
 
-  const selectedPark = parks.find(park => park.id === selectedParkId) || null;
-  const feedPosts = useMemo(() => [...posts, ...getSeededFeedPosts(parks)], [parks, posts]);
+  const parksWithMedia = useMemo(() => {
+    const byPark = new globalThis.Map<number, ParkMediaItem[]>();
+    parkMedia.forEach(item => byPark.set(item.parkId, [...(byPark.get(item.parkId) || []), item]));
+    return parks.map(park => {
+      const media = byPark.get(park.id) || [];
+      const approved = media.filter(item => item.moderationStatus === 'approved');
+      const approvedImages = approved.filter(item => item.mediaType === 'image').map(item => item.mediaUrl);
+      return {
+        ...park,
+        img: approvedImages[0] || park.img,
+        gallery: [...approvedImages, ...(park.gallery || [])].filter(Boolean),
+        media: approved,
+        pendingMediaCount: media.filter(item => item.moderationStatus === 'pending').length
+      };
+    });
+  }, [parkMedia, parks]);
+
+  const selectedPark = parksWithMedia.find(park => park.id === selectedParkId) || null;
+  const feedPosts = useMemo(() => [...posts, ...getSeededFeedPosts(parksWithMedia)], [parksWithMedia, posts]);
   const savedPosts = useMemo(() => feedPosts.filter(post => savedPostIds.has(post.id)), [feedPosts, savedPostIds]);
   const userApproved = Boolean(user && profile?.userStatus !== 'rejected');
 
@@ -99,13 +119,13 @@ export default function Home() {
 
   const loadPosts = useCallback(async () => {
     try {
-      const nextPosts = await fetchPosts(parks);
+      const nextPosts = await fetchPosts(parksWithMedia);
       setPosts(nextPosts);
     } catch (err) {
       console.error('[BARMAP posts] Could not load posts', err);
       showNotice(err instanceof Error ? err.message : 'Post loading failed.');
     }
-  }, [parks, showNotice]);
+  }, [parksWithMedia, showNotice]);
 
   const loadSavedPosts = useCallback(async (nextUser: User | null) => {
     if (!nextUser) {
@@ -164,6 +184,25 @@ export default function Home() {
     }
   }, [showNotice]);
 
+  const loadParkMedia = useCallback(async (userId?: string) => {
+    try {
+      const [approved, pendingOwn] = await Promise.all([fetchApprovedParkMedia(), fetchOwnPendingParkMedia(userId)]);
+      setParkMedia([...approved, ...pendingOwn]);
+    } catch (err) {
+      console.error('[BARMAP park media] Could not load park media', err);
+      showNotice(err instanceof Error ? err.message : 'Park media loading failed.');
+    }
+  }, [showNotice]);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      setSessions(await fetchUpcomingSessions());
+    } catch (err) {
+      console.error('[BARMAP sessions] Could not load sessions', err);
+      showNotice(err instanceof Error ? err.message : 'Sessions loading failed.');
+    }
+  }, [showNotice]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -199,6 +238,14 @@ export default function Home() {
   useEffect(() => {
     void loadPosts();
   }, [loadPosts]);
+
+  useEffect(() => {
+    void loadParkMedia(user?.id);
+  }, [loadParkMedia, user?.id]);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
 
   useEffect(() => {
     void loadApprovedDiscoveryParks();
@@ -447,7 +494,7 @@ export default function Home() {
 
       {activeAppTab === 'feed' && (
         <FeedPage
-          parks={parks}
+          parks={parksWithMedia}
           posts={posts}
           savedPostIds={savedPostIds}
           canInteract={userApproved}
@@ -468,7 +515,7 @@ export default function Home() {
       )}
       {activeAppTab === 'challenges' && (
         <ChallengesPage
-          parks={parks}
+          parks={parksWithMedia}
           submissions={missionSubmissions}
           canInteract={userApproved}
           onRestrictedAction={() => requireApprovedUser('join missions')}
@@ -477,9 +524,14 @@ export default function Home() {
       )}
       {activeAppTab === 'events' && (
         <EventsPage
-          parks={parks}
+          parks={parksWithMedia}
+          sessions={sessions}
           canInteract={userApproved}
           onRestrictedAction={() => requireApprovedUser('join sessions')}
+          onCreateSession={() => {
+            if (!requireApprovedUser('host sessions')) return;
+            setCreatePostOpen(true);
+          }}
         />
       )}
       {activeAppTab === 'profile' && (
@@ -504,7 +556,7 @@ export default function Home() {
       {activeAppTab === 'map' && (
         <>
           <Map
-            parks={parks}
+            parks={parksWithMedia}
             selectedPark={selectedPark}
             notice={notice}
             publicSpotLoading={publicSpotLoading}
@@ -528,6 +580,11 @@ export default function Home() {
             onAddPost={addPost}
             onSubmitScore={updateChallengeScore}
             onToggleRsvp={toggleRsvp}
+            user={user}
+            onMediaAdded={() => {
+              void loadParkMedia(user?.id);
+              showNotice('Media submitted for admin review.');
+            }}
           />
         </>
       )}
@@ -546,20 +603,14 @@ export default function Home() {
           showNotice('Thanks! Your park has been submitted and will be reviewed before appearing publicly.');
         }}
       />
-      <button
-        className="floating-create"
-        type="button"
-        onClick={() => {
-          if (!requireApprovedUser('create a post')) return;
-          setCreatePostOpen(true);
-        }}
-      >
-        <PlusIcon />
-        <span>Create</span>
-      </button>
       <BottomNav
         activeTab={activeAppTab}
         onTabChange={tab => {
+          if (tab === 'create') {
+            if (!requireApprovedUser('create')) return;
+            setCreatePostOpen(true);
+            return;
+          }
           setActiveAppTab(tab);
           if (tab !== 'map') {
             setSelectedParkId(null);
@@ -582,7 +633,7 @@ export default function Home() {
         open={createPostOpen}
         user={user}
         profile={profile}
-        parks={parks}
+        parks={parksWithMedia}
         onClose={() => setCreatePostOpen(false)}
         onAuthRequired={() => {
           setCreatePostOpen(false);
@@ -592,6 +643,18 @@ export default function Home() {
           void loadPosts();
           setActiveAppTab('feed');
           showNotice('Post created.');
+        }}
+        onSessionCreated={() => {
+          void loadSessions();
+          setActiveAppTab('events');
+          showNotice('Session posted.');
+        }}
+        onSubmitPark={() => {
+          if (!requireApprovedUser('submit parks')) return;
+          setActiveAppTab('map');
+          setSelectedParkId(null);
+          setPickingSpot(true);
+          showNotice('Tap the map where the park is located.');
         }}
       />
       <EditProfileModal

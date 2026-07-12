@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { CloseIcon } from '@/components/icons';
 import type { User } from '@supabase/supabase-js';
-import { createSubmittedSpot, equipmentFromInput, uploadSubmissionPhoto } from '@/lib/submissions';
+import { filesToMedia, revokeMediaPreviews, type SelectedMediaFile } from '@/lib/media';
+import { createSubmittedSpot, equipmentFromInput, uploadSubmissionMediaFiles } from '@/lib/submissions';
 
 type SubmitSpotModalProps = {
   pickedLatLng: {
@@ -28,15 +29,20 @@ const initialForm = {
 
 export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestrictedAction, onClose, onSaved }: SubmitSpotModalProps) {
   const [form, setForm] = useState(initialForm);
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [media, setMedia] = useState<SelectedMediaFile[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState('');
 
   useEffect(() => {
     if (pickedLatLng) {
       setForm(initialForm);
-      setPhoto(null);
+      setMedia(current => {
+        revokeMediaPreviews(current);
+        return [];
+      });
       setError('');
+      setProgress('');
     }
   }, [pickedLatLng]);
 
@@ -57,15 +63,18 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestr
     }
 
     const equipment = equipmentFromInput(form.equipment);
-    if (!form.name.trim() || !form.area.trim() || !photo) {
-      setError('Park name, location, and at least one photo are required.');
+    if (!form.name.trim() || !form.area.trim() || media.length === 0) {
+      setError('Park name, location, and at least one photo or video are required.');
       return;
     }
 
     try {
       setSaving(true);
       setError('');
-      const photoUrl = await uploadSubmissionPhoto(user.id, photo);
+      setProgress(`Uploading 0/${media.length}`);
+      const mediaUrls = await uploadSubmissionMediaFiles(user.id, media, (completed, total) => {
+        setProgress(`Uploading ${completed}/${total}`);
+      });
       await createSubmittedSpot({
         name: form.name.trim(),
         area: form.area.trim(),
@@ -73,7 +82,8 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestr
         hiddenLevel: form.hiddenLevel,
         bestTime: form.bestTime.trim(),
         notes: form.notes.trim(),
-        photoUrl,
+        photoUrl: mediaUrls[0],
+        mediaUrls,
         lat: pickedLatLng.lat,
         lng: pickedLatLng.lng
       });
@@ -85,6 +95,21 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestr
     } finally {
       setSaving(false);
     }
+  }
+
+  function addMedia(files: FileList | null) {
+    if (!files) return;
+    const next = filesToMedia(files);
+    setError(next.errors.join(' '));
+    setMedia(current => [...current, ...next.media].slice(0, 8));
+  }
+
+  function removeMedia(id: string) {
+    setMedia(current => {
+      const target = current.find(item => item.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return current.filter(item => item.id !== id);
+    });
   }
 
   return (
@@ -159,16 +184,33 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestr
               />
             </div>
             <div className="form-field full">
-              <label htmlFor="spotPhoto">Photo proof</label>
+              <label htmlFor="spotPhoto">Photo or video proof</label>
               <input
                 id="spotPhoto"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
                 capture="environment"
+                multiple
                 required
-                onChange={event => setPhoto(event.target.files?.[0] || null)}
+                onChange={event => addMedia(event.target.files)}
               />
             </div>
+            {media.length > 0 && (
+              <div className="media-preview-grid full">
+                {media.map(item => (
+                  <div className="media-preview" key={item.id}>
+                    {item.mediaType === 'image' ? (
+                      <img src={item.previewUrl} alt="" />
+                    ) : (
+                      <video src={item.previewUrl} muted playsInline />
+                    )}
+                    <button type="button" onClick={() => removeMedia(item.id)} aria-label={`Remove ${item.file.name}`}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="form-field full">
               <label htmlFor="spotNotes">Notes optional</label>
               <textarea
@@ -180,6 +222,7 @@ export default function SubmitSpotModal({ pickedLatLng, canSubmit, user, onRestr
               />
             </div>
           </div>
+          {progress && <p className="form-help">{progress}</p>}
           {error && <p className="auth-message">{error}</p>}
           <div className="form-actions">
             <button className="btn btn-ghost" id="cancelHiddenSpot" type="button" onClick={onClose}>

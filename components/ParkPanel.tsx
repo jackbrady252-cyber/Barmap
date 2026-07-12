@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { CheckIcon, CloseIcon, CommentIcon, GlobeIcon, HeartIcon, MapIcon, PinIcon, SendIcon, ShareIcon, SourceIcon } from '@/components/icons';
+import { filesToMedia, revokeMediaPreviews, type SelectedMediaFile } from '@/lib/media';
+import { uploadParkMediaFiles } from '@/lib/parkMedia';
 import { seeded } from '@/lib/social';
 import type { Challenge, FeedPost, Meetup, Park } from '@/types/park';
 
@@ -15,6 +18,8 @@ type ParkPanelProps = {
   onAddPost: (parkId: number, text: string) => void;
   onSubmitScore: (parkId: number, challengeName: string, score: number) => void;
   onToggleRsvp: (parkId: number, meetupIndex: number, going: boolean) => void;
+  user: User | null;
+  onMediaAdded: () => void;
 };
 
 export default function ParkPanel({
@@ -26,16 +31,30 @@ export default function ParkPanel({
   onRestrictedAction,
   onAddPost,
   onSubmitScore,
-  onToggleRsvp
+  onToggleRsvp,
+  user,
+  onMediaAdded
 }: ParkPanelProps) {
   const [activeImage, setActiveImage] = useState('');
   const [postText, setPostText] = useState('');
   const [goingMeetups, setGoingMeetups] = useState<Record<number, boolean>>({});
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<SelectedMediaFile[]>([]);
+  const [mediaMessage, setMediaMessage] = useState('');
+  const [mediaProgress, setMediaProgress] = useState('');
+  const [mediaSaving, setMediaSaving] = useState(false);
 
   useEffect(() => {
     setActiveImage(park?.img || '');
     setPostText('');
     setGoingMeetups({});
+    setMediaOpen(false);
+    setMediaFiles(current => {
+      revokeMediaPreviews(current);
+      return [];
+    });
+    setMediaMessage('');
+    setMediaProgress('');
   }, [park?.id, park?.img]);
 
   if (!park) {
@@ -50,7 +69,7 @@ export default function ParkPanel({
             <circle cx="8.5" cy="10.5" r="1.5" />
             <polyline points="21,15 16,10 6,19" />
           </svg>
-          <span className="placeholder-text">No photo yet - be first</span>
+          <span className="placeholder-text">Photos needed</span>
           <div className="hero-fade" />
           <div className="hero-credit" id="parkHeroCredit" />
           <div className="hero-badge" id="parkHeroBadge" style={{ display: 'none' }} />
@@ -95,6 +114,50 @@ export default function ParkPanel({
     setPostText('');
   }
 
+  function addMedia(files: FileList | null) {
+    if (!files) return;
+    const next = filesToMedia(files);
+    setMediaMessage(next.errors.join(' '));
+    setMediaFiles(current => [...current, ...next.media].slice(0, 10));
+  }
+
+  function removeMedia(id: string) {
+    setMediaFiles(current => {
+      const target = current.find(item => item.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return current.filter(item => item.id !== id);
+    });
+  }
+
+  async function submitMedia() {
+    if (!park) return;
+    if (!canInteract || !user) {
+      onRestrictedAction();
+      return;
+    }
+    if (mediaFiles.length === 0) {
+      setMediaMessage('Choose at least one photo or video.');
+      return;
+    }
+
+    try {
+      setMediaSaving(true);
+      setMediaMessage('');
+      setMediaProgress(`Uploading 0/${mediaFiles.length}`);
+      await uploadParkMediaFiles(user, park, mediaFiles, (completed, total) => setMediaProgress(`Uploading ${completed}/${total}`));
+      setMediaFiles(current => {
+        revokeMediaPreviews(current);
+        return [];
+      });
+      setMediaOpen(false);
+      onMediaAdded();
+    } catch (err) {
+      setMediaMessage(err instanceof Error ? err.message : 'Media upload failed.');
+    } finally {
+      setMediaSaving(false);
+    }
+  }
+
   return (
     <div className="panel open" id="sidePanel">
       <button className="panel-close" id="closePanel" title="Close" onClick={onClose}>
@@ -113,7 +176,7 @@ export default function ParkPanel({
               <circle cx="8.5" cy="10.5" r="1.5" />
               <polyline points="21,15 16,10 6,19" />
             </svg>
-            <span className="placeholder-text">No photo yet - be first</span>
+            <span className="placeholder-text">Photos needed</span>
           </>
         )}
         <div className="hero-fade" />
@@ -139,6 +202,23 @@ export default function ParkPanel({
             onClick={() => setActiveImage(src)}
           />
         ))}
+      </div>
+
+      <div className="panel-media-cta">
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={() => {
+            if (!canInteract) {
+              onRestrictedAction();
+              return;
+            }
+            setMediaOpen(true);
+          }}
+        >
+          Add Photos or Videos
+        </button>
+        {park.pendingMediaCount ? <span>{park.pendingMediaCount} of your uploads pending review</span> : <span>Help verify this park for the community.</span>}
       </div>
 
       <div className="panel-header">
@@ -236,6 +316,49 @@ export default function ParkPanel({
           </>
         )}
       </div>
+
+      {mediaOpen && (
+        <div className="sheet-backdrop" onClick={() => setMediaOpen(false)}>
+          <section className="action-sheet" role="dialog" aria-modal="true" aria-label="Add park media" onClick={event => event.stopPropagation()}>
+            <button className="sheet-close" type="button" onClick={() => setMediaOpen(false)} aria-label="Close media upload">
+              <CloseIcon />
+            </button>
+            <span className="sheet-kicker">Park media</span>
+            <h3>Add photos or videos</h3>
+            <div className="auth-body">
+              <div className="form-field">
+                <label htmlFor="park-media-upload">Photos or videos</label>
+                <input
+                  id="park-media-upload"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
+                  capture="environment"
+                  multiple
+                  onChange={event => addMedia(event.target.files)}
+                />
+              </div>
+              {mediaFiles.length > 0 && (
+                <div className="media-preview-grid">
+                  {mediaFiles.map(item => (
+                    <div className="media-preview" key={item.id}>
+                      {item.mediaType === 'image' ? <img src={item.previewUrl} alt="" /> : <video src={item.previewUrl} muted playsInline controls />}
+                      <button type="button" onClick={() => removeMedia(item.id)}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {mediaProgress && <p className="form-help">{mediaProgress}</p>}
+              {mediaMessage && <p className="auth-message">{mediaMessage}</p>}
+              <div className="auth-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setMediaOpen(false)}>Cancel</button>
+                <button className="btn btn-primary" type="button" disabled={mediaSaving} onClick={submitMedia}>
+                  {mediaSaving ? 'Uploading...' : 'Submit for Review'}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

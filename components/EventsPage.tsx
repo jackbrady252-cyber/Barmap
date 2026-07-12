@@ -1,45 +1,44 @@
 'use client';
 
-import type { FormEvent } from 'react';
 import { useState } from 'react';
+import type { TrainingSession } from '@/lib/sessions';
 import type { Park } from '@/types/park';
 
 export default function EventsPage({
   parks,
+  sessions,
   canInteract,
-  onRestrictedAction
+  onRestrictedAction,
+  onCreateSession
 }: {
   parks: Park[];
+  sessions: TrainingSession[];
   canInteract: boolean;
   onRestrictedAction: () => void;
+  onCreateSession: () => void;
 }) {
   const [joinedSessions, setJoinedSessions] = useState<Record<string, boolean>>({});
-  const [hostOpen, setHostOpen] = useState(false);
-  const [hostMessage, setHostMessage] = useState('');
   const base = parks.flatMap(park => park.meetups.map(meetup => ({ park, meetup }))).slice(0, 4);
   const names = ['Sunrise Bars', 'Saturday Crew Session', 'Mobility + Dip Work', 'Sea Swim + Bars'];
   const times = ['06:45', '10:30', '18:15', '08:00'];
   const hosts = ['Aine Power', 'Rory Malone', 'Shauna Keane', 'Cathal Doyle'];
-  const sessions = base.map((item, index) => ({
+  const seededSessions = base.map((item, index) => ({
     ...item,
     title: names[index] || item.meetup.title,
     time: times[index] || '10:00',
     host: hosts[index] || item.meetup.who
   }));
 
-  function submitHostSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canInteract) {
-      onRestrictedAction();
-      return;
-    }
-
-    setHostMessage('Session draft saved locally.');
-    window.setTimeout(() => {
-      setHostOpen(false);
-      setHostMessage('');
-    }, 1000);
-  }
+  const persistedSessions = sessions.map(session => ({
+    id: session.id,
+    title: session.title,
+    parkName: session.parkName,
+    parkArea: session.parkArea,
+    host: 'Community host',
+    timeLabel: formatSessionTime(session.startAt, session.endAt),
+    date: formatSessionDate(session.startAt),
+    going: session.participantLimit ? `${session.participantLimit} max` : 'Open crew'
+  }));
 
   return (
     <main className="app-main app-page session-page">
@@ -57,14 +56,41 @@ export default function EventsPage({
               onRestrictedAction();
               return;
             }
-            setHostOpen(true);
+            onCreateSession();
           }}
         >
-          Host a Session
+          Use Create tab to host
         </button>
       </section>
       <div className="session-list">
-        {sessions.map(({ park, meetup, title, time, host }, index) => (
+        {persistedSessions.map(session => (
+          <article className="session-card" key={session.id}>
+            <div className="event-date">
+              <span>{session.date.month}</span>
+              <b>{session.date.day}</b>
+            </div>
+            <div className="session-card__body">
+              <span>{session.timeLabel} · {session.host}</span>
+              <h3>{session.title}</h3>
+              <p>{session.parkName} · {session.parkArea}</p>
+              <b>{session.going}</b>
+            </div>
+            <button
+              className={joinedSessions[session.id] ? 'btn btn-primary' : 'btn btn-ghost'}
+              type="button"
+              onClick={() => {
+                if (!canInteract) {
+                  onRestrictedAction();
+                  return;
+                }
+                setJoinedSessions(current => ({ ...current, [session.id]: !current[session.id] }));
+              }}
+            >
+              {joinedSessions[session.id] ? 'Going' : 'Join'}
+            </button>
+          </article>
+        ))}
+        {seededSessions.map(({ park, meetup, title, time, host }, index) => (
           <article className="session-card" key={`${park.id}-${title}-${index}`}>
             <div className="event-date">
               <span>{meetup.date.m}</span>
@@ -91,34 +117,28 @@ export default function EventsPage({
             </button>
           </article>
         ))}
+        {persistedSessions.length === 0 && seededSessions.length === 0 && (
+          <div className="premium-empty">
+            <b>No upcoming sessions yet</b>
+            <span>Use the Create tab to host the first local training window.</span>
+          </div>
+        )}
       </div>
-      {hostOpen && (
-        <div className="sheet-backdrop" onClick={() => setHostOpen(false)}>
-          <form className="action-sheet" onSubmit={submitHostSession} onClick={event => event.stopPropagation()}>
-            <span className="sheet-kicker">Host session</span>
-            <h3>Create a local session draft</h3>
-            <div className="auth-body">
-              <div className="form-field">
-                <label htmlFor="host-title">Title</label>
-                <input id="host-title" required placeholder="Saturday bars" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="host-location">Location</label>
-                <input id="host-location" required placeholder="Park or area" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="host-time">Time</label>
-                <input id="host-time" required placeholder="10:30 Saturday" />
-              </div>
-              {hostMessage && <p className="auth-message">{hostMessage}</p>}
-              <div className="auth-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => setHostOpen(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit">Save Draft</button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
     </main>
   );
+}
+
+function formatSessionDate(value: string) {
+  const date = new Date(value);
+  return {
+    month: date.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(),
+    day: date.getDate()
+  };
+}
+
+function formatSessionTime(start: string, end: string) {
+  const startLabel = new Date(start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  if (!end) return startLabel;
+  const endLabel = new Date(end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return `${startLabel} - ${endLabel}`;
 }

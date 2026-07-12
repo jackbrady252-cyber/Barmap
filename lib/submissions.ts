@@ -1,4 +1,5 @@
 import type { SubmittedSpot } from '@/types/park';
+import { sanitizeFileName, type SelectedMediaFile } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
 
 export const SUBMISSIONS_KEY = 'barmap.hiddenSpots.v1';
@@ -18,7 +19,9 @@ type SubmittedSpotRow = {
   created_at: string;
 };
 
-type NewSubmittedSpot = Omit<SubmittedSpot, 'id' | 'createdAt' | 'status'>;
+type NewSubmittedSpot = Omit<SubmittedSpot, 'id' | 'createdAt' | 'status'> & {
+  mediaUrls?: string[];
+};
 const PARK_SUBMISSIONS_BUCKET = 'park-submissions';
 
 export function equipmentFromInput(value: string) {
@@ -114,6 +117,7 @@ export async function createSubmittedSpot(input: NewSubmittedSpot): Promise<Subm
 
   const submittedSpot = rowToSubmittedSpot(data);
 
+  const imageUrls = input.mediaUrls?.length ? input.mediaUrls : input.photoUrl ? [input.photoUrl] : [];
   const { error: candidateError } = await supabase.from('discovery_candidates').insert({
     name: input.name,
     area: input.area,
@@ -127,13 +131,13 @@ export async function createSubmittedSpot(input: NewSubmittedSpot): Promise<Subm
     equipment_guess: input.equipment,
     photo_url: input.photoUrl || '',
     attribution: 'BarMap community submission',
-    image_status: input.photoUrl ? 'community_verified' : 'none',
-    image_count: input.photoUrl ? 1 : 0,
-    image_urls: input.photoUrl ? [input.photoUrl] : [],
-    image_sources: input.photoUrl ? ['User uploaded photo'] : [],
-    image_attributions: input.photoUrl ? ['BarMap community submission'] : [],
-    image_diagnostics: input.photoUrl ? ['image_found'] : [],
-    confidence_score: input.photoUrl ? 82 : 45,
+    image_status: imageUrls.length ? 'community_verified' : 'none',
+    image_count: imageUrls.length,
+    image_urls: imageUrls,
+    image_sources: imageUrls.map(() => 'User uploaded media'),
+    image_attributions: imageUrls.map(() => 'BarMap community submission'),
+    image_diagnostics: imageUrls.length ? ['image_found'] : [],
+    confidence_score: imageUrls.length ? 82 : 45,
     status: 'pending'
   });
   if (candidateError) {
@@ -159,10 +163,6 @@ export async function fetchSubmittedSpots(): Promise<SubmittedSpot[]> {
   return (data || []).map(row => rowToSubmittedSpot(row as SubmittedSpotRow));
 }
 
-function sanitizeFileName(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '') || 'park-photo';
-}
-
 export async function uploadSubmissionPhoto(userId: string, file: File): Promise<string> {
   if (!supabase) throw new Error('Supabase is not configured.');
 
@@ -176,4 +176,30 @@ export async function uploadSubmissionPhoto(userId: string, file: File): Promise
 
   const { data } = supabase.storage.from(PARK_SUBMISSIONS_BUCKET).getPublicUrl(path);
   return data.publicUrl;
+}
+
+export async function uploadSubmissionMediaFiles(
+  userId: string,
+  media: SelectedMediaFile[],
+  onProgress?: (completed: number, total: number) => void
+): Promise<string[]> {
+  if (!supabase) throw new Error('Supabase is not configured.');
+  if (media.length === 0) throw new Error('Choose at least one photo or video.');
+
+  const urls: string[] = [];
+  for (const item of media) {
+    const path = `${userId}/${Date.now()}-${item.id}-${sanitizeFileName(item.file.name)}`;
+    const { error } = await supabase.storage.from(PARK_SUBMISSIONS_BUCKET).upload(path, item.file, {
+      cacheControl: '3600',
+      contentType: item.file.type || (item.mediaType === 'image' ? 'image/jpeg' : 'video/mp4'),
+      upsert: false
+    });
+    if (error) throw new Error(`Upload failed for ${item.file.name}: ${error.message}`);
+
+    const { data } = supabase.storage.from(PARK_SUBMISSIONS_BUCKET).getPublicUrl(path);
+    urls.push(data.publicUrl);
+    onProgress?.(urls.length, media.length);
+  }
+
+  return urls;
 }

@@ -15,6 +15,12 @@ export type SocialPost = {
   park?: Park;
   mediaType: 'image' | 'video';
   mediaUrl?: string;
+  mediaItems?: Array<{
+    id: string;
+    mediaType: 'image' | 'video';
+    mediaUrl: string;
+    position: number;
+  }>;
   caption: string;
   challenge?: string;
   tags: string[];

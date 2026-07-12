@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { BookmarkIcon, CloseIcon, CommentIcon, HeartIcon, PlayIcon, ShareIcon } from '@/components/icons';
+import { BookmarkIcon, CloseIcon, CommentIcon, HeartIcon, ShareIcon } from '@/components/icons';
 import LocationTag from '@/components/LocationTag';
 import UserAvatar from '@/components/UserAvatar';
 import type { SocialPost } from '@/types/social';
@@ -22,15 +22,20 @@ export default function PostCard({ post, saved: savedProp, canInteract = true, o
   const [commentText, setCommentText] = useState('');
   const [localComments, setLocalComments] = useState<string[]>([]);
   const [feedback, setFeedback] = useState('');
+  const [mediaIndex, setMediaIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const likes = post.likes + (liked ? 1 : 0);
   const comments = post.comments + localComments.length;
   const commentsKey = useMemo(() => `barmap:post:${post.id}:comments`, [post.id]);
-  const backgroundImage = post.mediaUrl
-    ? `url("${post.mediaUrl}")`
-    : post.park?.img
-      ? `url("${post.park.img}")`
-      : undefined;
+  const mediaItems = post.mediaItems?.length
+    ? post.mediaItems
+    : post.mediaUrl
+      ? [{ id: `${post.id}-media`, mediaType: post.mediaType, mediaUrl: post.mediaUrl, position: 0 }]
+      : post.park?.img
+        ? [{ id: `${post.id}-park`, mediaType: 'image' as const, mediaUrl: post.park.img, position: 0 }]
+        : [];
+  const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(0, mediaItems.length - 1))];
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -123,12 +128,26 @@ export default function PostCard({ post, saved: savedProp, canInteract = true, o
         </div>
       </header>
 
-      <div className={`social-post__media social-post__media--${post.mediaType}`} style={{ backgroundImage }}>
-        <div className="media-type">
-          {post.mediaType === 'video' && <PlayIcon />}
-          <span>{post.mediaType}</span>
+      {activeMedia && (
+        <div className="social-post__media-frame">
+          <div className="social-post__media">
+            {activeMedia.mediaType === 'image' ? (
+              <button className="media-open-button" type="button" onClick={() => setLightboxOpen(true)} aria-label="View post media fullscreen">
+              <img src={activeMedia.mediaUrl} alt="" loading="lazy" />
+              </button>
+            ) : (
+              <video src={activeMedia.mediaUrl} controls muted playsInline preload="metadata" />
+            )}
+          </div>
+          {mediaItems.length > 1 && (
+            <div className="media-carousel-controls">
+              <button type="button" onClick={() => setMediaIndex(index => Math.max(0, index - 1))} disabled={mediaIndex === 0}>Prev</button>
+              <span>{mediaIndex + 1}/{mediaItems.length}</span>
+              <button type="button" onClick={() => setMediaIndex(index => Math.min(mediaItems.length - 1, index + 1))} disabled={mediaIndex >= mediaItems.length - 1}>Next</button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       <div className="social-post__body">
         <div className="post-context">
@@ -241,6 +260,19 @@ export default function PostCard({ post, saved: savedProp, canInteract = true, o
               </button>
             </div>
           </section>
+        </div>
+      )}
+
+      {lightboxOpen && activeMedia && (
+        <div className="media-lightbox" onClick={() => setLightboxOpen(false)}>
+          <button type="button" className="sheet-close" onClick={() => setLightboxOpen(false)} aria-label="Close media viewer">
+            <CloseIcon />
+          </button>
+          {activeMedia.mediaType === 'image' ? (
+            <img src={activeMedia.mediaUrl} alt="" />
+          ) : (
+            <video src={activeMedia.mediaUrl} controls autoPlay playsInline />
+          )}
         </div>
       )}
     </article>
