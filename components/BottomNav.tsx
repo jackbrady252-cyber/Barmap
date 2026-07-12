@@ -1,17 +1,15 @@
 'use client';
 
 import type { ComponentType } from 'react';
-import { CalendarIcon, ChallengeIcon, CreateIcon, FeedIcon, MapTabIcon, ProfileIcon, UsersIcon } from '@/components/NavIcons';
+import { CalendarIcon, CreateIcon, FeedIcon, MapTabIcon, ProfileIcon } from '@/components/NavIcons';
 
-export type AppTab = 'feed' | 'map' | 'users' | 'create' | 'challenges' | 'events' | 'profile';
+export type AppTab = 'feed' | 'map' | 'create' | 'activity' | 'profile';
 
 const tabs: Array<{ id: AppTab; label: string; icon: ComponentType }> = [
-  { id: 'feed', label: 'Feed', icon: FeedIcon },
+  { id: 'feed', label: 'Home', icon: FeedIcon },
   { id: 'map', label: 'Map', icon: MapTabIcon },
-  { id: 'users', label: 'Users', icon: UsersIcon },
   { id: 'create', label: 'Create', icon: CreateIcon },
-  { id: 'challenges', label: 'Missions', icon: ChallengeIcon },
-  { id: 'events', label: 'Sessions', icon: CalendarIcon },
+  { id: 'activity', label: 'Activity', icon: CalendarIcon },
   { id: 'profile', label: 'Profile', icon: ProfileIcon }
 ];
 

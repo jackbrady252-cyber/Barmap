@@ -57,7 +57,7 @@ export async function fetchApprovedUsers(currentUserId?: string): Promise<UserDi
     supabase
       .from('profiles')
       .select('id,username,display_name,avatar_url,bio,home_city,user_status,created_at')
-      .eq('user_status', 'approved')
+      .neq('user_status', 'rejected')
       .order('created_at', { ascending: false }),
     supabase
       .from('follows')

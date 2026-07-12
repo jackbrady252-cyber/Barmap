@@ -18,6 +18,8 @@ type ProfilePageProps = {
   savedPostIds: Set<string>;
   workoutLogs: WorkoutLog[];
   missionSubmissions: MissionSubmission[];
+  followerCount: number;
+  followingCount: number;
   onCreatePost: () => void;
   onEditProfile: () => void;
   onToggleSave: (post: SocialPost, nextSaved: boolean) => Promise<void> | void;
@@ -49,6 +51,8 @@ export default function ProfilePage({
   savedPostIds,
   workoutLogs,
   missionSubmissions,
+  followerCount,
+  followingCount,
   onCreatePost,
   onEditProfile,
   onToggleSave,
@@ -57,7 +61,7 @@ export default function ProfilePage({
   onSignOut,
   onFeedbackOpen
 }: ProfilePageProps) {
-  const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'stats' | 'saved'>('posts');
+  const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'contributions' | 'saved'>('posts');
   const [logOpen, setLogOpen] = useState(false);
   const [workoutType, setWorkoutType] = useState('');
   const [exercise, setExercise] = useState('');
@@ -121,7 +125,6 @@ export default function ProfilePage({
   const homeCity = profile?.homeCity || 'Ireland';
   const postTiles = posts.slice(0, 12);
   const pendingSubmissions = missionSubmissions.filter(submission => submission.verificationStatus === 'pending');
-  const approvedSubmissions = missionSubmissions.filter(submission => submission.verificationStatus === 'approved');
 
   function submitWorkout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -161,12 +164,12 @@ export default function ProfilePage({
           <span>Posts</span>
         </div>
         <div>
-          <b>{approvedSubmissions.length}</b>
-          <span>Missions</span>
+          <b>{followerCount}</b>
+          <span>Followers</span>
         </div>
         <div>
-          <b>0</b>
-          <span>Sessions</span>
+          <b>{followingCount}</b>
+          <span>Following</span>
         </div>
         <div>
           <b>{savedPosts.length}</b>
@@ -175,9 +178,9 @@ export default function ProfilePage({
       </section>
 
       <div className="profile-actions">
-        <button className="btn btn-primary" type="button" onClick={() => setLogOpen(true)}>Log Workout</button>
         <button className="btn btn-primary" type="button" onClick={onEditProfile}>Edit Profile</button>
         <button className="btn btn-ghost" type="button" onClick={onFeedbackOpen}>Feedback</button>
+        <button className="btn btn-ghost" type="button" onClick={() => setLogOpen(true)}>Settings</button>
         <button className="btn btn-ghost" type="button" onClick={onSignOut}>Log Out</button>
       </div>
 
@@ -185,14 +188,14 @@ export default function ProfilePage({
         <div className="profile-tab-list">
           {[
             ['posts', 'Posts'],
-            ['stats', 'Stats'],
-            ['saved', 'Saved Spots']
+            ['contributions', 'Contributions'],
+            ['saved', 'Saved']
           ].map(([id, label]) => (
             <button
               className={activeProfileTab === id ? 'active' : ''}
               type="button"
               key={id}
-              onClick={() => setActiveProfileTab(id as 'posts' | 'stats' | 'saved')}
+              onClick={() => setActiveProfileTab(id as 'posts' | 'contributions' | 'saved')}
             >
               {label}
             </button>
@@ -205,11 +208,9 @@ export default function ProfilePage({
               {postTiles.map(post => (
                 <div
                   className="profile-post-tile"
-                  style={{ backgroundImage: post.mediaUrl ? `url("${post.mediaUrl}")` : post.park?.img ? `url("${post.park.img}")` : undefined }}
+                  style={{ backgroundImage: post.mediaItems?.[0]?.mediaType === 'image' ? `url("${post.mediaItems[0].mediaUrl}")` : post.mediaUrl ? `url("${post.mediaUrl}")` : post.park?.img ? `url("${post.park.img}")` : undefined }}
                   key={post.id}
-                >
-                  <span>{post.mediaType}</span>
-                </div>
+                />
               ))}
             </div>
           ) : (
@@ -221,69 +222,21 @@ export default function ProfilePage({
           )
         )}
 
-        {activeProfileTab === 'stats' && (
+        {activeProfileTab === 'contributions' && (
           <div className="profile-stats-stack">
             <section className="profile-stat-section">
-              <div className="profile-section-head">
-                <h3>Training Log</h3>
-                <button className="btn btn-primary" type="button" onClick={() => setLogOpen(true)}>Log Workout</button>
-              </div>
-              {workoutLogs.length > 0 ? workoutLogs.slice(0, 4).map(log => (
-                <article className="training-log-card" key={log.id}>
-                  <b>{log.workoutType} · {log.exercise}</b>
-                  <span>{log.setsRepsTimeDistance}</span>
-                  <p>{log.location || 'No location'} · {new Date(log.createdAt).toLocaleDateString()}</p>
-                  {log.notes && <p>{log.notes}</p>}
-                </article>
-              )) : (
-                <div className="premium-empty compact">
-                  <b>No workouts logged</b>
-                  <span>Log a session to build your training history.</span>
-                </div>
-              )}
-            </section>
-
-            <section className="profile-stat-section">
-              <h3>Personal Records</h3>
+              <h3>Park Contributions</h3>
               <div className="profile-stats-list">
-                <div><span>Best pull-up result</span><b>{workoutLogs[0]?.setsRepsTimeDistance || 'Not logged'}</b></div>
-                <div><span>Most recent exercise</span><b>{workoutLogs[0]?.exercise || 'Not logged'}</b></div>
+                <div><span>Posts at parks</span><b>{posts.filter(post => post.park).length}</b></div>
+                <div><span>Saved park posts</span><b>{savedPosts.length}</b></div>
               </div>
             </section>
 
             <section className="profile-stat-section">
-              <h3>Missions Completed</h3>
+              <h3>Training Activity</h3>
               <div className="profile-stats-list">
-                <div><span>Approved submissions</span><b>{approvedSubmissions.length}</b></div>
-                <div><span>Pending verification</span><b>{pendingSubmissions.length}</b></div>
-              </div>
-              {pendingSubmissions.length > 0 && (
-                <div className="pending-list">
-                  {pendingSubmissions.map(submission => (
-                    <article className="compact-card" key={submission.id}>
-                      <div>
-                        <h3>{submission.missionTitle}</h3>
-                        <p>{submission.result} · {submission.videoProofName}</p>
-                      </div>
-                      <div className="score-pill">Pending Review</div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="profile-stat-section">
-              <h3>Saved Spots</h3>
-              <div className="profile-stats-list">
-                <div><span>Saved posts/spots</span><b>{savedPosts.length}</b></div>
-              </div>
-            </section>
-
-            <section className="profile-stat-section">
-              <h3>Sessions Attended</h3>
-              <div className="profile-stats-list">
-                <div><span>Tracked sessions</span><b>0</b></div>
-                <div><span>Member since</span><b>{profile?.createdAt ? new Date(profile.createdAt).getFullYear() : 'New'}</b></div>
+                <div><span>Logged workouts</span><b>{workoutLogs.length}</b></div>
+                <div><span>Pending mission proofs</span><b>{pendingSubmissions.length}</b></div>
               </div>
             </section>
           </div>

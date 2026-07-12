@@ -29,8 +29,8 @@ export default function FeedPage({ parks, posts, savedPostIds, canInteract, foll
     <main className="app-main feed-screen">
       <section className="feed-rail" aria-label="BARMAP feed">
         <div className="feed-head">
-          <span>Community Feed</span>
-          <b>Share training, spots and sessions</b>
+          <span>Home</span>
+          <b>Calisthenics parks, sessions and community</b>
         </div>
         <div className="feed-filter" aria-label="Feed filter">
           <button className={feedFilter === 'all' ? 'active' : ''} type="button" onClick={() => setFeedFilter('all')}>All</button>

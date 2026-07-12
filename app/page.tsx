@@ -2,20 +2,18 @@
 
 import type { User } from '@supabase/supabase-js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ActivityPage from '@/components/ActivityPage';
 import AppHeader from '@/components/AppHeader';
 import AuthModal from '@/components/AuthModal';
 import BottomNav, { type AppTab } from '@/components/BottomNav';
-import ChallengesPage from '@/components/ChallengesPage';
 import CreatePostModal from '@/components/CreatePostModal';
 import EditProfileModal from '@/components/EditProfileModal';
-import EventsPage from '@/components/EventsPage';
 import FeedPage from '@/components/FeedPage';
 import FeedbackModal from '@/components/FeedbackModal';
 import Map from '@/components/Map';
 import ParkPanel from '@/components/ParkPanel';
 import ProfilePage from '@/components/ProfilePage';
 import SubmitSpotModal from '@/components/SubmitSpotModal';
-import UsersPage from '@/components/UsersPage';
 import { verifiedParks } from '@/data/parks';
 import { getSeededFeedPosts } from '@/data/socialFeed';
 import { ensureProfile, fetchProfile, getCurrentUser, signOut as signOutUser } from '@/lib/auth';
@@ -41,7 +39,7 @@ export default function Home() {
   const initialParks = useMemo(() => hydrateParks(verifiedParks), []);
   const [parks, setParks] = useState<Park[]>(initialParks);
   const [selectedParkId, setSelectedParkId] = useState<number | null>(null);
-  const [activeAppTab, setActiveAppTab] = useState<AppTab>('map');
+  const [activeAppTab, setActiveAppTab] = useState<AppTab>('feed');
   const [activeParkTab, setActiveParkTab] = useState('feed');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [createPostOpen, setCreatePostOpen] = useState(false);
@@ -87,6 +85,7 @@ export default function Home() {
   const selectedPark = parksWithMedia.find(park => park.id === selectedParkId) || null;
   const feedPosts = useMemo(() => [...posts, ...getSeededFeedPosts(parksWithMedia)], [parksWithMedia, posts]);
   const savedPosts = useMemo(() => feedPosts.filter(post => savedPostIds.has(post.id)), [feedPosts, savedPostIds]);
+  const currentDirectoryProfile = useMemo(() => discoveryUsers.find(item => item.id === user?.id) || null, [discoveryUsers, user?.id]);
   const userApproved = Boolean(user && profile?.userStatus !== 'rejected');
 
   const showNotice = useCallback((message: string) => {
@@ -280,6 +279,25 @@ export default function Home() {
   useEffect(() => {
     void loadFollowingIds(user);
     void loadUsers(user?.id);
+  }, [loadFollowingIds, loadUsers, user]);
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+    const client = supabase;
+    const channel = client
+      .channel('people-directory-refresh')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        void loadUsers(user?.id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, () => {
+        void loadUsers(user?.id);
+        void loadFollowingIds(user);
+      })
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
   }, [loadFollowingIds, loadUsers, user]);
 
   useEffect(() => {
@@ -503,31 +521,17 @@ export default function Home() {
           onToggleSave={handleToggleSave}
         />
       )}
-      {activeAppTab === 'users' && (
-        <UsersPage
-          currentUserId={user?.id}
-          users={discoveryUsers}
-          loading={usersLoading}
-          canInteract={userApproved}
-          onRestrictedAction={() => requireApprovedUser('follow users')}
-          onToggleFollow={handleToggleFollow}
-        />
-      )}
-      {activeAppTab === 'challenges' && (
-        <ChallengesPage
-          parks={parksWithMedia}
-          submissions={missionSubmissions}
-          canInteract={userApproved}
-          onRestrictedAction={() => requireApprovedUser('join missions')}
-          onSubmitMission={submitMission}
-        />
-      )}
-      {activeAppTab === 'events' && (
-        <EventsPage
+      {activeAppTab === 'activity' && (
+        <ActivityPage
           parks={parksWithMedia}
           sessions={sessions}
+          users={discoveryUsers}
+          usersLoading={usersLoading}
+          currentUserId={user?.id}
+          followingUserIds={followingIds}
           canInteract={userApproved}
-          onRestrictedAction={() => requireApprovedUser('join sessions')}
+          onRestrictedAction={() => requireApprovedUser('use activity')}
+          onToggleFollow={handleToggleFollow}
           onCreateSession={() => {
             if (!requireApprovedUser('host sessions')) return;
             setCreatePostOpen(true);
@@ -544,6 +548,8 @@ export default function Home() {
           savedPostIds={savedPostIds}
           workoutLogs={workoutLogs}
           missionSubmissions={missionSubmissions}
+          followerCount={currentDirectoryProfile?.followerCount || 0}
+          followingCount={currentDirectoryProfile?.followingCount || followingIds.size}
           onCreatePost={() => setCreatePostOpen(true)}
           onEditProfile={() => setEditProfileOpen(true)}
           onToggleSave={handleToggleSave}
@@ -585,6 +591,7 @@ export default function Home() {
               void loadParkMedia(user?.id);
               showNotice('Media submitted for admin review.');
             }}
+            onSubmitCorrection={() => setFeedbackOpen(true)}
           />
         </>
       )}
@@ -646,7 +653,7 @@ export default function Home() {
         }}
         onSessionCreated={() => {
           void loadSessions();
-          setActiveAppTab('events');
+          setActiveAppTab('activity');
           showNotice('Session posted.');
         }}
         onSubmitPark={() => {

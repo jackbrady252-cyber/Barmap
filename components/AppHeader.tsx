@@ -1,6 +1,6 @@
 'use client';
 
-import { PinIcon, PlusIcon, UserIcon } from '@/components/icons';
+import { PinIcon, UserIcon } from '@/components/icons';
 import type { UserProfile } from '@/types/auth';
 
 type AppHeaderProps = {
@@ -43,10 +43,12 @@ export default function AppHeader({ pickingSpot, profile, loggedIn, onSubmitPark
       </div>
       <div className="nav-actions">
         <button className="btn btn-ghost header-feedback" type="button" onClick={onFeedbackOpen}>Feedback</button>
-        <button className={`btn${pickingSpot ? ' btn-primary' : ''}`} id="addParkBtn" onClick={onSubmitPark}>
-          {pickingSpot ? <PinIcon small /> : <PlusIcon small />}
-          {pickingSpot ? 'Pick spot' : 'Submit park'}
-        </button>
+        {pickingSpot && (
+          <button className="btn btn-primary" id="addParkBtn" onClick={onSubmitPark}>
+            <PinIcon small />
+            Pick spot
+          </button>
+        )}
         <button
           className={`avatar header-profile${loggedIn ? '' : ' logged-out'}`}
           id="profileBtn"

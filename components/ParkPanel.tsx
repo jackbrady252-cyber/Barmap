@@ -20,6 +20,7 @@ type ParkPanelProps = {
   onToggleRsvp: (parkId: number, meetupIndex: number, going: boolean) => void;
   user: User | null;
   onMediaAdded: () => void;
+  onSubmitCorrection: () => void;
 };
 
 export default function ParkPanel({
@@ -33,7 +34,8 @@ export default function ParkPanel({
   onSubmitScore,
   onToggleRsvp,
   user,
-  onMediaAdded
+  onMediaAdded,
+  onSubmitCorrection
 }: ParkPanelProps) {
   const [activeImage, setActiveImage] = useState('');
   const [postText, setPostText] = useState('');
@@ -261,6 +263,10 @@ export default function ParkPanel({
           <MapIcon />
           Map data
         </a>
+        <button type="button" onClick={onSubmitCorrection}>
+          <CommentIcon />
+          Submit Correction
+        </button>
       </div>
 
       <Tabs activeTab={activeTab} onTabChange={onTabChange} />
